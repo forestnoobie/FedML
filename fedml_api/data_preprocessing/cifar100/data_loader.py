@@ -168,8 +168,27 @@ def get_dataloader(dataset, datadir, train_bs, test_bs, dataidxs=None):
 def get_dataloader_test(dataset, datadir, train_bs, test_bs, dataidxs_train, dataidxs_test):
     return get_dataloader_test_CIFAR100(datadir, train_bs, test_bs, dataidxs_train, dataidxs_test)
 
+def get_unlabeled_dataloader_CIFAR100(datadir, train_bs, test_bs, dataidxs=None):
+    
+    # For ensemble distillation, shuffle off + return num of train and test
+    
+    dl_obj = CIFAR100_truncated
 
-def get_dataloader_CIFAR100(datadir, train_bs, test_bs, dataidxs=None):
+    transform_train, transform_test = _data_transforms_cifar100()
+
+    train_ds = dl_obj(datadir, dataidxs=dataidxs, train=True, transform=transform_train, download=True)
+    test_ds = dl_obj(datadir, train=False, transform=transform_test, download=True)
+    
+    train_data_num = len(train_ds)
+    test_data_num = len(test_ds)
+    
+    train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=False,
+                               num_workers=0, pin_memory=True)
+    test_dl = data.DataLoader(dataset=test_ds, batch_size=test_bs, shuffle=False)
+    
+    return train_data_num, test_data_num, train_dl, test_dl    
+
+def get_dataloader_CIFAR100(datadir, train_bs, test_bs, dataidxs=None, num_workers=0):
     dl_obj = CIFAR100_truncated
 
     transform_train, transform_test = _data_transforms_cifar100()
@@ -177,13 +196,31 @@ def get_dataloader_CIFAR100(datadir, train_bs, test_bs, dataidxs=None):
     train_ds = dl_obj(datadir, dataidxs=dataidxs, train=True, transform=transform_train, download=True)
     test_ds = dl_obj(datadir, train=False, transform=transform_test, download=True)
 
-    train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=True, drop_last=True)
+    train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=True, drop_last=True,
+                               num_workers=num_workers, pin_memory=True)
     test_dl = data.DataLoader(dataset=test_ds, batch_size=test_bs, shuffle=False, drop_last=True)
 
     return train_dl, test_dl
 
+def get_dataloader_val_CIFAR100(datadir, train_bs, test_bs, dataidxs=None, num_workers=0):
+    # Test transforms for validation set
+    dl_obj = CIFAR100_truncated
 
-def get_dataloader_test_CIFAR100(datadir, train_bs, test_bs, dataidxs_train=None, dataidxs_test=None):
+    transform_train, transform_test = _data_transforms_cifar100()
+
+    train_ds = dl_obj(datadir, dataidxs=dataidxs, train=True, transform=transform_test, download=True)
+    test_ds = dl_obj(datadir, train=False, transform=transform_test, download=True)
+
+    train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=True,
+                               drop_last=True, num_workers=num_workers, pin_memory=True)
+    test_dl = data.DataLoader(dataset=test_ds, batch_size=test_bs, shuffle=False,
+                              drop_last=True)
+
+    return train_dl, test_dl
+
+
+def get_dataloader_test_CIFAR100(datadir, train_bs, test_bs, dataidxs_train=None, dataidxs_test=None,
+                                 num_workers=0):
     dl_obj = CIFAR100_truncated
 
     transform_train, transform_test = _data_transforms_cifar100()
@@ -265,5 +302,15 @@ def load_partition_data_cifar100(dataset, data_dir, partition_method, partition_
             client_idx, len(train_data_local), len(test_data_local)))
         train_data_local_dict[client_idx] = train_data_local
         test_data_local_dict[client_idx] = test_data_local
+
+    if valid_ratio > 0.0 :
+        # Get valid dataloader
+        dataidxs = valid_idxs
+        # validation batch size 1024 for fast validation and 8 num_workers
+        valid_data_global, _ = get_dataloader_val_CIFAR100(data_dir, 1024, 64, dataidxs, num_workers=0)
+
+        return train_data_num, test_data_num, train_data_global, test_data_global, \
+           data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num, valid_data_global
+
     return train_data_num, test_data_num, train_data_global, test_data_global, \
            data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num

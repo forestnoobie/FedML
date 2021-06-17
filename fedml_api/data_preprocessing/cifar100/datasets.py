@@ -50,7 +50,6 @@ class CIFAR100_truncated(data.Dataset):
         self.data, self.target = self.__build_truncated_dataset__()
 
     def __build_truncated_dataset__(self):
-
         cifar_dataobj = CIFAR100(self.root, self.train, self.transform, self.target_transform, self.download)
 
         if self.train:
