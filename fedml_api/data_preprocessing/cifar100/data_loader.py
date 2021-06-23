@@ -183,12 +183,12 @@ def get_unlabeled_dataloader_CIFAR100(datadir, train_bs, test_bs, dataidxs=None)
     test_data_num = len(test_ds)
     
     train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=False,
-                               num_workers=0, pin_memory=True)
+                               num_workers=2, pin_memory=True)
     test_dl = data.DataLoader(dataset=test_ds, batch_size=test_bs, shuffle=False)
     
     return train_data_num, test_data_num, train_dl, test_dl    
 
-def get_dataloader_CIFAR100(datadir, train_bs, test_bs, dataidxs=None, num_workers=0):
+def get_dataloader_CIFAR100(datadir, train_bs, test_bs, dataidxs=None, num_workers=2):
     dl_obj = CIFAR100_truncated
 
     transform_train, transform_test = _data_transforms_cifar100()
@@ -202,7 +202,7 @@ def get_dataloader_CIFAR100(datadir, train_bs, test_bs, dataidxs=None, num_worke
 
     return train_dl, test_dl
 
-def get_dataloader_val_CIFAR100(datadir, train_bs, test_bs, dataidxs=None, num_workers=0):
+def get_dataloader_val_CIFAR100(datadir, train_bs, test_bs, dataidxs=None, num_workers=2):
     # Test transforms for validation set
     dl_obj = CIFAR100_truncated
 
@@ -220,7 +220,7 @@ def get_dataloader_val_CIFAR100(datadir, train_bs, test_bs, dataidxs=None, num_w
 
 
 def get_dataloader_test_CIFAR100(datadir, train_bs, test_bs, dataidxs_train=None, dataidxs_test=None,
-                                 num_workers=0):
+                                 num_workers=2):
     dl_obj = CIFAR100_truncated
 
     transform_train, transform_test = _data_transforms_cifar100()
@@ -307,7 +307,7 @@ def load_partition_data_cifar100(dataset, data_dir, partition_method, partition_
         # Get valid dataloader
         dataidxs = valid_idxs
         # validation batch size 1024 for fast validation and 8 num_workers
-        valid_data_global, _ = get_dataloader_val_CIFAR100(data_dir, 1024, 64, dataidxs, num_workers=0)
+        valid_data_global, _ = get_dataloader_val_CIFAR100(data_dir, 1024, 64, dataidxs, num_workers=2)
 
         return train_data_num, test_data_num, train_data_global, test_data_global, \
            data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num, valid_data_global

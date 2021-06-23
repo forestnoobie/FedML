@@ -2,6 +2,7 @@ import logging
 
 import torch
 from torch import nn
+from tqdm import trange
 
 try:
     from fedml_core.trainer.model_trainer import ModelTrainer
@@ -31,7 +32,10 @@ class MyModelTrainer(ModelTrainer):
                                          weight_decay=args.wd, amsgrad=True)
 
         epoch_loss = []
+
+
         for epoch in range(args.epochs):
+
             batch_loss = []
             for batch_idx, (x, labels) in enumerate(train_data):
                 x, labels = x.to(device), labels.to(device)
@@ -51,6 +55,8 @@ class MyModelTrainer(ModelTrainer):
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
             logging.info('Client Index = {}\tEpoch: {}\tLoss: {:.6f}'.format(
                 self.id, epoch, sum(epoch_loss) / len(epoch_loss)))
+
+            # pbar.set_postfix(epoch_loss=epoch_loss[-1])
 
     def test(self, test_data, device, args):
         model = self.model

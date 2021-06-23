@@ -146,7 +146,7 @@ class FeddfAPI(object):
         }
 
         unlabeled_dataloader = self.unlabeled_train_data
-        unlabeled_dataloader.dataset.target = avg_logits.cpu().numpy()
+        unlabeled_dataloader.dataset.target = avg_logits.detach().cpu().numpy()
         round_server_val_acc = self.model_trainer.train(unlabeled_dataloader, self.val_global, self.device, self.args)
 
         wandb.log({"Server/val/Acc": round_server_val_acc, "round": round_idx})
