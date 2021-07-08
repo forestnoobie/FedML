@@ -1,4 +1,6 @@
+import os
 import logging
+import copy
 
 from tqdm import tqdm
 import torch
@@ -20,16 +22,49 @@ class MyModelTrainer(ModelTrainer):
     def set_model_params(self, model_parameters):
         self.model.load_state_dict(model_parameters)
 
+    def get_logits_from_clients(self, image, device ,args):
+        # Load model params in client instance
+        # Make model class
+        # Feedforward model in eval mode
+        # Need Current round selected clients
+
+        selected_client_indexes = self.client_indexes
+        flist = os.listdir(self.save_model_dir)
+        save_paths = []
+        for fname in flist:
+            selected_client = fname[-1]
+            if int(selected_client) in selected_client_indexes.tolist():
+                save_paths.append(os.path.join(self.save_model_dir ,fname))
+
+        # save_paths = [selected_client for selected_client in save_paths
+        #               if int(selected_client[-1]) in selected_client_indexes.tolist()]
+        # # Choose clients which are selected in this round
+        data_num = image.size(0)
+        model = copy.deepcopy(self.model)
+        avg_logits = torch.zeros(data_num, self.class_num, device=device)
+
+        with torch.no_grad():
+            for path in save_paths:
+                model.cpu().load_state_dict(torch.load(path))
+                model.eval()
+                image = image.to(device)
+                model = model.to(device)
+                avg_logits += model(image)
+
+        avg_logits /= len(save_paths)
+        return avg_logits
+
+    # Online Training
     def train(self, train_data, val_data, device, args):
-        
+
         model = self.model
         model.to(device)
 
         # train and update
         criterion = nn.KLDivLoss(reduction='batchmean').to(device)
-        
+
         optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.server_lr,
-                                         weight_decay=args.wd, amsgrad=True)
+                                     weight_decay=args.wd, amsgrad=True)
         scheduler = CosineAnnealingLR(optimizer, args.server_steps)
 
         epoch = 0
@@ -39,20 +74,24 @@ class MyModelTrainer(ModelTrainer):
         curr_val_acc = 0
         best_val_acc = 0
 
-        while curr_step < args.server_steps and patience_step < args.server_patience_steps :
+        while curr_step < args.server_steps and patience_step < args.server_patience_steps:
             batch_loss = []
-            with tqdm(train_data, unit="Step") as tstep :
+            with tqdm(train_data, unit="Step") as tstep:
                 for batch_idx, (x, labels) in enumerate(tstep):
                     tstep.set_description(f"Step {curr_step}")
 
-                    if curr_step < args.server_steps and patience_step < args.server_patience_steps :
+                    if curr_step < args.server_steps and patience_step < args.server_patience_steps:
                         model.train()
                         x, labels = x.to(device), labels.to(device)
                         model.zero_grad()
                         output = model(x)
                         log_prob = F.log_softmax(output, dim=1)
                         label_prob = F.softmax(labels, dim=1)
-                        loss = criterion(log_prob, labels)
+
+                        # Get average logits from clients
+                        avg_logits = self.get_logits_from_clients(x, device, args)
+
+                        loss = criterion(log_prob, avg_logits)
                         loss.backward()
 
                         # to avoid nan loss
@@ -65,7 +104,7 @@ class MyModelTrainer(ModelTrainer):
                         patience_step += 1
 
                         ## Evaluate
-                        if val_data :
+                        if val_data:
                             curr_val_acc = self.validate(val_data, device, args)
                             if curr_val_acc > best_val_acc:
                                 best_val_acc = curr_val_acc
@@ -75,7 +114,7 @@ class MyModelTrainer(ModelTrainer):
                         tstep.set_postfix(val_acc=curr_val_acc, best_val_acc=best_val_acc, step_loss=loss.item())
 
 
-                    else :
+                    else:
                         # If val_acc plateaus or reaches server_steps
                         break
 
@@ -84,6 +123,72 @@ class MyModelTrainer(ModelTrainer):
                 # logging.info("Server Epoch {} Validate acc {:.3f}".format(epoch, curr_val_acc.item()))
 
         return best_val_acc
+
+    # Offline training
+    # def train(self, train_data, val_data, device, args):
+    #
+    #     model = self.model
+    #     model.to(device)
+    #
+    #     # train and update
+    #     criterion = nn.KLDivLoss(reduction='batchmean').to(device)
+    #
+    #     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.server_lr,
+    #                                      weight_decay=args.wd, amsgrad=True)
+    #     scheduler = CosineAnnealingLR(optimizer, args.server_steps)
+    #
+    #     epoch = 0
+    #     epoch_loss = []
+    #     curr_step = 0
+    #     patience_step = 0
+    #     curr_val_acc = 0
+    #     best_val_acc = 0
+    #
+    #     while curr_step < args.server_steps and patience_step < args.server_patience_steps :
+    #         batch_loss = []
+    #         with tqdm(train_data, unit="Step") as tstep :
+    #             for batch_idx, (x, labels) in enumerate(tstep):
+    #                 tstep.set_description(f"Step {curr_step}")
+    #
+    #                 if curr_step < args.server_steps and patience_step < args.server_patience_steps :
+    #                     model.train()
+    #                     x, labels = x.to(device), labels.to(device)
+    #                     model.zero_grad()
+    #                     output = model(x)
+    #                     log_prob = F.log_softmax(output, dim=1)
+    #                     label_prob = F.softmax(labels, dim=1)
+    #                     loss = criterion(log_prob, labels)
+    #                     loss.backward()
+    #
+    #                     # to avoid nan loss
+    #                     torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+    #
+    #                     optimizer.step()
+    #                     batch_loss.append(loss.item())
+    #
+    #                     curr_step += 1
+    #                     patience_step += 1
+    #
+    #                     ## Evaluate
+    #                     if val_data :
+    #                         curr_val_acc = self.validate(val_data, device, args)
+    #                         if curr_val_acc > best_val_acc:
+    #                             best_val_acc = curr_val_acc
+    #                             patience_step = 0
+    #                     scheduler.step()
+    #
+    #                     tstep.set_postfix(val_acc=curr_val_acc, best_val_acc=best_val_acc, step_loss=loss.item())
+    #
+    #
+    #                 else :
+    #                     # If val_acc plateaus or reaches server_steps
+    #                     break
+    #
+    #             # epoch += 1
+    #             # epoch_loss.append(sum(batch_loss) / len(batch_loss))
+    #             # logging.info("Server Epoch {} Validate acc {:.3f}".format(epoch, curr_val_acc.item()))
+    #
+    #     return best_val_acc
 
 
     def validate(self, val_data, device, args):

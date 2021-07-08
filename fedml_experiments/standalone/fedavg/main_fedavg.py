@@ -18,6 +18,7 @@ from fedml_api.data_preprocessing.shakespeare.data_loader import load_partition_
 from fedml_api.data_preprocessing.fed_shakespeare.data_loader import load_partition_data_federated_shakespeare
 from fedml_api.data_preprocessing.stackoverflow_lr.data_loader import load_partition_data_federated_stackoverflow_lr
 from fedml_api.data_preprocessing.stackoverflow_nwp.data_loader import load_partition_data_federated_stackoverflow_nwp
+from fedml_api.data_preprocessing.stackoverflow_nwp.data_loader import load_partition_data_federated_stackoverflow_nwp
 from fedml_api.data_preprocessing.ImageNet.data_loader import load_partition_data_ImageNet
 from fedml_api.data_preprocessing.Landmarks.data_loader import load_partition_data_landmarks
 from fedml_api.model.cv.mobilenet import mobilenet
@@ -93,6 +94,10 @@ def add_args(parser):
 
     parser.add_argument('--seed', type=int, default=0,
                         help="Seed")
+
+    parser.add_argument('--split_equally', help='Split equally?',
+                        action='store_true')
+
     return parser
 
 
@@ -207,7 +212,8 @@ def load_data(args, dataset_name):
         train_data_num, test_data_num, train_data_global, test_data_global, \
         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num = data_loader(args.dataset, args.data_dir, args.partition_method,
-                                args.partition_alpha, args.client_num_in_total, args.batch_size)
+                                args.partition_alpha, args.client_num_in_total, args.batch_size,
+                                split_equally=args.split_equally)
 
     if centralized:
         train_data_local_num_dict = {
@@ -291,8 +297,8 @@ if __name__ == "__main__":
 
     wandb.init(
         project="fedml",
-        name="FedAVG-aff-r-" + str(args.comm_round) + "-e" + str(args.epochs) + "-lr" + str(args.lr) + "-alp" + str(
-            args.partition_alpha),
+        name="FedAVG-r-" + str(args.comm_round) + "-e" + str(args.epochs) + "-lr" + str(args.lr) 
+             + '-' + str(args.dataset) + '-' + str(args.model) + "-alp" + str(args.partition_alpha),
         config=args
     )
 

@@ -1,6 +1,8 @@
 import copy
 import logging
 import random
+import os
+from _collections import defaultdict
 
 import numpy as np
 import torch
@@ -30,10 +32,19 @@ class FeddfAPI(object):
         self.train_data_local_dict = train_data_local_dict
         self.test_data_local_dict = test_data_local_dict
 
+        ## For tracking best acc
+        self._stats = defaultdict(int)
+
+        ## For saving model directory
+        self.save_model_dir = os.path.join(args.wandb_save_dir, "./model_parameters")
+        os.makedirs(self.save_model_dir, exist_ok=True)
+
         [server_model_trainer, client_model_trainer] = model_trainer
         self.model_trainer = server_model_trainer
+        self.model_trainer.save_model_dir = self.save_model_dir
+        self.model_trainer.class_num = class_num
         self._setup_clients(train_data_local_num_dict, train_data_local_dict, test_data_local_dict, client_model_trainer)
-        
+
         ## Distillation Fusion
         [train_data_num, test_data_num, unlabeled_train_dl, unlabeled_test_dl] = unlabeled_dataset
         self.unlabeled_train_data = unlabeled_train_dl
@@ -52,6 +63,20 @@ class FeddfAPI(object):
     def _init_logits(self):
         init_logits = torch.zeros(self.unlabeled_train_data_num, self.class_num, device=self.device)
         return init_logits
+
+    def _update_stats(self, stats):
+        past_stats = self._stats
+
+        for k, v in stats.items():
+            if k not in past_stats.keys(): # Default value
+                past_stats["best_" + k] = v
+
+            if 'acc' in k :
+                past_stats["best_" + k] = max(v, past_stats["best_" + k])
+            elif 'loss' in k :
+                past_stats["best_" + k] = min(v, past_stats["best_" + k])
+
+        logging.info(past_stats)
 
     def train(self):
         w_global = self.model_trainer.get_model_params()
@@ -79,9 +104,12 @@ class FeddfAPI(object):
                 # train on new dataset
                 w = client.train(copy.deepcopy(w_global))
                 w_locals.append((client.get_sample_number(), copy.deepcopy(w)))
+
+                # Save model
+                client.model_trainer.save_model(self.save_model_dir)
                 
-                # Gather average Logits
-                avg_logits += client.get_logits(self.unlabeled_train_data)
+                # Gather average Logits for offline logits
+                # avg_logits += client.get_logits(self.unlabeled_train_data)
 
             # Initialize model fusion with aggregated w_global
             w_global = self._aggregate(w_locals)
@@ -111,6 +139,8 @@ class FeddfAPI(object):
             np.random.seed(round_idx)  # make sure for each comparison, we are selecting the same clients each round
             client_indexes = np.random.choice(range(client_num_in_total), num_clients, replace=False)
         logging.info("client_indexes = %s" % str(client_indexes))
+        self.model_trainer.client_indexes = client_indexes
+
         return client_indexes
 
     def _aggregate(self, w_locals):
@@ -213,11 +243,13 @@ class FeddfAPI(object):
         wandb.log({"Train/Acc": train_acc, "round": round_idx})
         wandb.log({"Train/Loss": train_loss, "round": round_idx})
         logging.info(stats)
+        self._update_stats(stats)
 
         stats = {'test_acc': test_acc, 'test_loss': test_loss}
         wandb.log({"Test/Acc": test_acc, "round": round_idx})
         wandb.log({"Test/Loss": test_loss, "round": round_idx})
         logging.info(stats)
+        self._update_stats(stats)
 
     def _local_test_on_validation_set(self, round_idx):
 

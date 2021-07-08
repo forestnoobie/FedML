@@ -1,4 +1,5 @@
 import logging
+import os
 
 import torch
 from torch import nn
@@ -16,6 +17,12 @@ class MyModelTrainer(ModelTrainer):
 
     def set_model_params(self, model_parameters):
         self.model.load_state_dict(model_parameters)
+
+    def save_model(self, save_dir, model_type='client'):
+        model = self.model
+        model_file_name = model_type + '_' + str(self.id)
+        save_path = os.path.join(save_dir, model_file_name)
+        torch.save(model.cpu().state_dict(), save_path)
 
     def train(self, train_data, device, args):
         model = self.model

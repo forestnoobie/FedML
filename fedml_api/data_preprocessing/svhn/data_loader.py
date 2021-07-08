@@ -7,7 +7,7 @@ import torch
 import torch.utils.data as data
 import torchvision.transforms as transforms
 
-from .datasets import CIFAR10_truncated
+from .datasets import SVHN_truncated
 
 logging.basicConfig()
 logger = logging.getLogger()
@@ -15,7 +15,7 @@ logger.setLevel(logging.INFO)
 
 
 # generate the non-IID distribution for all methods
-def read_data_distribution(filename='./data_preprocessing/non-iid-distribution/CIFAR10/distribution.txt'):
+def read_data_distribution(filename='./data_preprocessing/non-iid-distribution/svhn/distribution.txt'):
     distribution = {}
     with open(filename, 'r') as data:
         for x in data.readlines():
@@ -30,7 +30,7 @@ def read_data_distribution(filename='./data_preprocessing/non-iid-distribution/C
     return distribution
 
 
-def read_net_dataidx_map(filename='./data_preprocessing/non-iid-distribution/CIFAR10/net_dataidx_map.txt'):
+def read_net_dataidx_map(filename='./data_preprocessing/non-iid-distribution/svhn/net_dataidx_map.txt'):
     net_dataidx_map = {}
     with open(filename, 'r') as data:
         for x in data.readlines():
@@ -56,64 +56,36 @@ def record_net_data_stats(y_train, net_dataidx_map):
     return net_cls_counts
 
 
-class Cutout(object):
-    def __init__(self, length):
-        self.length = length
-
-    def __call__(self, img):
-        h, w = img.size(1), img.size(2)
-        mask = np.ones((h, w), np.float32)
-        y = np.random.randint(h)
-        x = np.random.randint(w)
-
-        y1 = np.clip(y - self.length // 2, 0, h)
-        y2 = np.clip(y + self.length // 2, 0, h)
-        x1 = np.clip(x - self.length // 2, 0, w)
-        x2 = np.clip(x + self.length // 2, 0, w)
-
-        mask[y1: y2, x1: x2] = 0.
-        mask = torch.from_numpy(mask)
-        mask = mask.expand_as(img)
-        img *= mask
-        return img
-
-
-def _data_transforms_cifar10():
-    CIFAR_MEAN = [0.49139968, 0.48215827, 0.44653124]
-    CIFAR_STD = [0.24703233, 0.24348505, 0.26158768]
+#################
+def _data_transforms_svhn():
 
     train_transform = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
-    ])
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
-    train_transform.transforms.append(Cutout(16))
 
     valid_transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])
 
     return train_transform, valid_transform
 
+##################
+def svhn(datadir):
+    train_transform, test_transform = _data_transforms_svhn()
 
-def load_cifar10_data(datadir):
-    train_transform, test_transform = _data_transforms_cifar10()
+    svhn_train_ds = SVHN_truncated(datadir, train=True, download=True, transform=train_transform)
+    svhn_test_ds = SVHN_truncated(datadir, train=False, download=True, transform=test_transform)
 
-    cifar10_train_ds = CIFAR10_truncated(datadir, train=True, download=True, transform=train_transform)
-    cifar10_test_ds = CIFAR10_truncated(datadir, train=False, download=True, transform=test_transform)
-
-    X_train, y_train = cifar10_train_ds.data, cifar10_train_ds.target
-    X_test, y_test = cifar10_test_ds.data, cifar10_test_ds.target
+    X_train, y_train = svhn_train_ds.data, svhn_train_ds.target
+    X_test, y_test = svhn_test_ds.data, svhn_test_ds.target
 
     return (X_train, y_train, X_test, y_test)
-
+#################
 def partition_data(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0):
     logging.info("*********partition data***************")
-    X_train, y_train, X_test, y_test = load_cifar10_data(datadir)
+    X_train, y_train, X_test, y_test = load_svhn_data(datadir)
     n_train = X_train.shape[0]
     # n_test = X_test.shape[0]
     total_idxs = np.random.permutation(n_train)
@@ -168,11 +140,11 @@ def partition_data(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0):
             net_dataidx_map[j] = idx_batch[j]
 
     elif partition == "hetero-fix":
-        dataidx_map_file_path = './data_preprocessing/non-iid-distribution/CIFAR10/net_dataidx_map.txt'
+        dataidx_map_file_path = './data_preprocessing/non-iid-distribution/svhn/net_dataidx_map.txt'
         net_dataidx_map = read_net_dataidx_map(dataidx_map_file_path)
 
     if partition == "hetero-fix":
-        distribution_file_path = './data_preprocessing/non-iid-distribution/CIFAR10/distribution.txt'
+        distribution_file_path = './data_preprocessing/non-iid-distribution/svhn/distribution.txt'
         traindata_cls_counts = read_data_distribution(distribution_file_path)
     else:
         traindata_cls_counts = record_net_data_stats(y_train, net_dataidx_map)
@@ -182,11 +154,12 @@ def partition_data(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0):
 
     return  X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts
 
+#######################
 def partition_data_equally(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0):
     logging.info("*********partition data equally***************")
     n_auxi_nets = 10
     assert n_auxi_nets <= n_nets
-    X_train, y_train, X_test, y_test = load_cifar10_data(datadir)
+    X_train, y_train, X_test, y_test = load_svhn_data(datadir)
     n_train = X_train.shape[0]
     # n_test = X_test.shape[0]
     total_idxs = np.random.permutation(n_train)
@@ -216,6 +189,7 @@ def partition_data_equally(dataset, datadir, partition, n_nets, alpha, valid_rat
     elif partition == 'hetero':
         # Divide indicies to smaller groups
 
+        min_size = 0
         K = 10 ### Number of class!
         net_dataidx_map = {}
         num_indicies = X_train.shape[0]
@@ -284,11 +258,11 @@ def partition_data_equally(dataset, datadir, partition, n_nets, alpha, valid_rat
             net_dataidx_map[j] =idx_batch[j]
 
     elif partition == "hetero-fix":
-        dataidx_map_file_path = './data_preprocessing/non-iid-distribution/CIFAR10/net_dataidx_map.txt'
+        dataidx_map_file_path = './data_preprocessing/non-iid-distribution/svhn/net_dataidx_map.txt'
         net_dataidx_map = read_net_dataidx_map(dataidx_map_file_path)
 
     if partition == "hetero-fix":
-        distribution_file_path = './data_preprocessing/non-iid-distribution/CIFAR10/distribution.txt'
+        distribution_file_path = './data_preprocessing/non-iid-distribution/svhn/distribution.txt'
         traindata_cls_counts = read_data_distribution(distribution_file_path)
     else:
         traindata_cls_counts = record_net_data_stats(y_train, net_dataidx_map)
@@ -302,20 +276,20 @@ def partition_data_equally(dataset, datadir, partition, n_nets, alpha, valid_rat
 
 # for centralized training
 def get_dataloader(dataset, datadir, train_bs, test_bs, dataidxs=None):
-    return get_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs)
+    return get_dataloader_svhn(datadir, train_bs, test_bs, dataidxs)
 
 
 # for local devices
 def get_dataloader_test(dataset, datadir, train_bs, test_bs, dataidxs_train, dataidxs_test):
-    return get_dataloader_test_CIFAR10(datadir, train_bs, test_bs, dataidxs_train, dataidxs_test)
+    return get_dataloader_test_svhn(datadir, train_bs, test_bs, dataidxs_train, dataidxs_test)
 
 
-def get_unlabeled_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None, num_workers=0):
+def get_unlabeled_dataloader_SVHN(datadir, train_bs, test_bs, dataidxs=None, num_workers=0):
     # For ensemble distillation, shuffle off + return num of train and test
 
-    dl_obj = CIFAR10_truncated
+    dl_obj = SVHN_truncated
 
-    transform_train, transform_test = _data_transforms_cifar10()
+    transform_train, transform_test = _data_transforms_svhn()
 
     train_ds = dl_obj(datadir, dataidxs=dataidxs, train=True, transform=transform_train, download=True)
     test_ds = dl_obj(datadir, train=False, transform=transform_test, download=True)
@@ -330,10 +304,10 @@ def get_unlabeled_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None, 
     return train_data_num, test_data_num, train_dl, test_dl
 
 
-def get_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None, num_workers=0):
-    dl_obj = CIFAR10_truncated
+def get_dataloader_SVHN(datadir, train_bs, test_bs, dataidxs=None, num_workers=0):
+    dl_obj = SVHN_truncated
 
-    transform_train, transform_test = _data_transforms_cifar10()
+    transform_train, transform_test = _data_transforms_svhn()
 
     train_ds = dl_obj(datadir, dataidxs=dataidxs, train=True, transform=transform_train, download=True)
     test_ds = dl_obj(datadir, train=False, transform=transform_test, download=True)
@@ -345,12 +319,12 @@ def get_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None, num_worker
 
     return train_dl, test_dl
 
-def get_dataloader_val_CIFAR10(datadir, train_bs, test_bs, dataidxs=None, num_workers=0):
+def get_dataloader_val_SVHN(datadir, train_bs, test_bs, dataidxs=None, num_workers=0):
     # Test transforms for validation set
 
-    dl_obj = CIFAR10_truncated
+    dl_obj = SVHN_truncated
 
-    transform_train, transform_test = _data_transforms_cifar10()
+    transform_train, transform_test = _data_transforms_svhn()
 
     train_ds = dl_obj(datadir, dataidxs=dataidxs, train=True, transform=transform_test, download=True)
     test_ds = dl_obj(datadir, train=False, transform=transform_test, download=True)
@@ -362,10 +336,10 @@ def get_dataloader_val_CIFAR10(datadir, train_bs, test_bs, dataidxs=None, num_wo
 
     return train_dl, test_dl
 
-def get_dataloader_test_CIFAR10(datadir, train_bs, test_bs, dataidxs_train=None, dataidxs_test=None):
-    dl_obj = CIFAR10_truncated
+def get_dataloader_test_SVHN(datadir, train_bs, test_bs, dataidxs_train=None, dataidxs_test=None):
+    dl_obj = SVHN_truncated
 
-    transform_train, transform_test = _data_transforms_cifar10()
+    transform_train, transform_test = _data_transforms_svhn()
 
     train_ds = dl_obj(datadir, dataidxs=dataidxs_train, train=True, transform=transform_train, download=True)
     test_ds = dl_obj(datadir, dataidxs=dataidxs_test, train=False, transform=transform_test, download=True)
@@ -376,7 +350,7 @@ def get_dataloader_test_CIFAR10(datadir, train_bs, test_bs, dataidxs_train=None,
     return train_dl, test_dl
 
 
-def load_partition_data_distributed_cifar10(process_id, dataset, data_dir, partition_method, partition_alpha,
+def load_partition_data_distributed_svhn(process_id, dataset, data_dir, partition_method, partition_alpha,
                                             client_number, batch_size):
     X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data(dataset,
                                                                                              data_dir,
@@ -411,7 +385,7 @@ def load_partition_data_distributed_cifar10(process_id, dataset, data_dir, parti
            train_data_local, test_data_local, class_num
 
 
-def load_partition_data_cifar10(dataset, data_dir, partition_method, partition_alpha, client_number,
+def load_partition_data_svhn(dataset, data_dir, partition_method, partition_alpha, client_number,
                                 batch_size, valid_ratio=0.0, split_equally=False):
     if split_equally :
         partitioned_data = partition_data_equally(dataset,
@@ -466,7 +440,7 @@ def load_partition_data_cifar10(dataset, data_dir, partition_method, partition_a
         # Get valid dataloader
         dataidxs = valid_idxs
         # validation batch size 1024 for fast validation and 2 num_workers
-        valid_data_global, _ = get_dataloader_val_CIFAR10(data_dir, 1024, 64, dataidxs, num_workers=0)
+        valid_data_global, _ = get_dataloader_val_svhn(data_dir, 1024, 64, dataidxs, num_workers=0)
 
 
         return train_data_num, test_data_num, train_data_global, test_data_global, \
@@ -476,7 +450,7 @@ def load_partition_data_cifar10(dataset, data_dir, partition_method, partition_a
            data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num
 
 
-def load_partition_data_cifar10_validation(dataset, data_dir, partition_method, partition_alpha, client_number,
+def load_partition_data_svhn_validation(dataset, data_dir, partition_method, partition_alpha, client_number,
                                            batch_size, valid_ratio=0.0):
     X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data(dataset,
                                                                                              data_dir,
