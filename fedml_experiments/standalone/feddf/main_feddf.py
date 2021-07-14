@@ -103,7 +103,7 @@ def add_args(parser):
     parser.add_argument('--unlabeled_data_dir', type=str, default='', metavar='N',
                         help='Unlabeled dataset used for ensemble')
 
-    parser.add_argument('--unlabeled_dataset', type=str, default='cifar10', metavar='N',
+    parser.add_argument('--unlabeled_dataset', type=str, default='cifar100', metavar='N',
                         help='Unlabeled dataset used for ensemble')
 
     parser.add_argument('--unlabeled_batch_size', type=int, default=128, metavar='N',
@@ -231,7 +231,7 @@ def load_data(args, dataset_name):
         elif dataset_name == "cinic10":
             data_loader = load_partition_data_cinic10
         else:
-            data_loader = load_partition_data_cifar10
+            raise ValueError("dataset {} has not been defined".format(dataset_name))
 
         train_data_num, test_data_num, train_data_global, test_data_global, \
         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
@@ -268,6 +268,7 @@ def load_data(args, dataset_name):
 
 def load_unlabeled_data(args, dataset_name):
 
+    logging.info("{} as unlabeled dataset".format(dataset_name))
     # Unlabeled data dir
     if args.unlabeled_data_dir == "":
         args.unlabeled_data_dir = args.data_dir

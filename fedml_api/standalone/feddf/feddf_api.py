@@ -68,13 +68,15 @@ class FeddfAPI(object):
         past_stats = self._stats
 
         for k, v in stats.items():
-            if k not in past_stats.keys(): # Default value
+            if "best_" + k not in past_stats.keys(): # Default value
                 past_stats["best_" + k] = v
 
             if 'acc' in k :
-                past_stats["best_" + k] = max(v, past_stats["best_" + k])
+                max_value = max(v, past_stats["best_" + k])
+                past_stats["best_" + k] = max_value
             elif 'loss' in k :
-                past_stats["best_" + k] = min(v, past_stats["best_" + k])
+                min_value = min(v, past_stats["best_" + k])
+                past_stats["best_" + k] = min_value
 
         logging.info(past_stats)
 
@@ -84,7 +86,7 @@ class FeddfAPI(object):
             logging.info("################Communication round : {}".format(round_idx))
 
             w_locals = [] # N * C \ N : number of unlabeled dataset,  C : number of classes of labeled dataset
-            avg_logits = self._init_logits()
+            avg_logits = self._init_logits() # For offline dataloader
 
             """
             for scalability: following the original FedAvg algorithm, we uniformly sample a fraction of clients in each round.

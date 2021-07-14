@@ -47,6 +47,7 @@ class MyModelTrainer(ModelTrainer):
             for path in save_paths:
                 model.cpu().load_state_dict(torch.load(path))
                 model.eval()
+
                 image = image.to(device)
                 model = model.to(device)
                 avg_logits += model(image)

@@ -275,7 +275,6 @@ def partition_data_equally(dataset, datadir, partition, n_nets, alpha, valid_rat
                     _idx_batch = [idx_j + idx.tolist() for idx_j, idx in zip(_idx_batch, np.split(idx_k, propotions))]
                     min_size = min([len(idx_j) for idx_j in _idx_batch])
 
-
             for j in range(_n_nets):
                 np.random.shuffle(_idx_batch[j])
             idx_batch += _idx_batch
@@ -310,7 +309,7 @@ def get_dataloader_test(dataset, datadir, train_bs, test_bs, dataidxs_train, dat
     return get_dataloader_test_CIFAR10(datadir, train_bs, test_bs, dataidxs_train, dataidxs_test)
 
 
-def get_unlabeled_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None, num_workers=0):
+def get_unlabeled_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None, num_workers=2):
     # For ensemble distillation, shuffle off + return num of train and test
 
     dl_obj = CIFAR10_truncated
@@ -330,7 +329,7 @@ def get_unlabeled_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None, 
     return train_data_num, test_data_num, train_dl, test_dl
 
 
-def get_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None, num_workers=0):
+def get_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None, num_workers=2):
     dl_obj = CIFAR10_truncated
 
     transform_train, transform_test = _data_transforms_cifar10()
@@ -362,7 +361,8 @@ def get_dataloader_val_CIFAR10(datadir, train_bs, test_bs, dataidxs=None, num_wo
 
     return train_dl, test_dl
 
-def get_dataloader_test_CIFAR10(datadir, train_bs, test_bs, dataidxs_train=None, dataidxs_test=None):
+def get_dataloader_test_CIFAR10(datadir, train_bs, test_bs, dataidxs_train=None, dataidxs_test=None,
+                                num_workers=2):
     dl_obj = CIFAR10_truncated
 
     transform_train, transform_test = _data_transforms_cifar10()
@@ -370,8 +370,10 @@ def get_dataloader_test_CIFAR10(datadir, train_bs, test_bs, dataidxs_train=None,
     train_ds = dl_obj(datadir, dataidxs=dataidxs_train, train=True, transform=transform_train, download=True)
     test_ds = dl_obj(datadir, dataidxs=dataidxs_test, train=False, transform=transform_test, download=True)
 
-    train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=True, drop_last=False)
-    test_dl = data.DataLoader(dataset=test_ds, batch_size=test_bs, shuffle=False, drop_last=False)
+    train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=True, drop_last=False,
+                               num_workers=num_workers)
+    test_dl = data.DataLoader(dataset=test_ds, batch_size=test_bs, shuffle=False, drop_last=False,
+                              num_workers=num_workers)
 
     return train_dl, test_dl
 
@@ -467,7 +469,6 @@ def load_partition_data_cifar10(dataset, data_dir, partition_method, partition_a
         dataidxs = valid_idxs
         # validation batch size 1024 for fast validation and 2 num_workers
         valid_data_global, _ = get_dataloader_val_CIFAR10(data_dir, 1024, 64, dataidxs, num_workers=0)
-
 
         return train_data_num, test_data_num, train_data_global, test_data_global, \
            data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num, valid_data_global
