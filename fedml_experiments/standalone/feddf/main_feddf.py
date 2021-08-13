@@ -33,6 +33,7 @@ from fedml_api.model.cv.resnet_gn import resnet18
 
 from fedml_api.standalone.feddf.feddf_api import FeddfAPI
 from fedml_api.standalone.feddf.my_model_trainer_ensemble import MyModelTrainer as MyModelTrainerENS
+from fedml_api.standalone.feddf.my_model_trainer_ensemble import MyModelTrainer_full_logits as MyModelTrainerENS_full
 from fedml_api.standalone.feddf.my_model_trainer_classification import MyModelTrainer as MyModelTrainerCLS
 from fedml_api.standalone.feddf.my_model_trainer_nwp import MyModelTrainer as MyModelTrainerNWP
 from fedml_api.standalone.feddf.my_model_trainer_tag_prediction import MyModelTrainer as MyModelTrainerTAG
@@ -98,6 +99,14 @@ def add_args(parser):
     parser.add_argument('--split_equally', help='Split equally?',
                         action='store_true')
 
+    # For Multi augmentation
+
+    parser.add_argument('--randaug', help='Use rand aug for labeled dataset (clients)',
+                        action='store_true')
+
+    parser.add_argument('--unlabeled_randaug', help='Use rand aug for unlabeled dataset (server)',
+                        action='store_true')
+
     # For Ensemble distillation
 
     parser.add_argument('--unlabeled_data_dir', type=str, default='', metavar='N',
@@ -120,6 +129,9 @@ def add_args(parser):
 
     parser.add_argument('--valid_ratio', type=float, default=0.0, metavar='LR',
                         help='Ratio of validation set')
+
+    parser.add_argument('--logit_type', type=str, default='average', metavar='LR',
+                        help='Type of logit')
 
     return parser
 
@@ -237,7 +249,7 @@ def load_data(args, dataset_name):
         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num, *valid_idxs = data_loader(args.dataset, args.data_dir, args.partition_method,
                                 args.partition_alpha, args.client_num_in_total, args.batch_size,
-                                             args.valid_ratio, split_equally=args.split_equally)
+                                             args.valid_ratio, split_equally=args.split_equally, randaug=args.randaug)
 
     if centralized:
         train_data_local_num_dict = {
@@ -277,15 +289,18 @@ def load_unlabeled_data(args, dataset_name):
     if dataset_name == "cifar10":
         train_data_num, test_data_num, train_dl, test_dl = get_unlabeled_dataloader_CIFAR10(args.unlabeled_data_dir,
                                                                                             args.unlabeled_batch_size,
-                                                                                            args.unlabeled_batch_size)
+                                                                                            args.unlabeled_batch_size,
+                                                                                            randaug=args.unlabeled_randaug)
     elif dataset_name == "cifar100":
         train_data_num, test_data_num, train_dl, test_dl = get_unlabeled_dataloader_CIFAR100(args.unlabeled_data_dir,
                                                                                             args.unlabeled_batch_size,
-                                                                                            args.unlabeled_batch_size)
+                                                                                            args.unlabeled_batch_size,
+                                                                                            randaug=args.unlabeled_randaug)
     elif dataset_name == "svhn":
         train_data_num, test_data_num, train_dl, test_dl = get_unlabeled_dataloader_SVHN(args.unlabeled_data_dir,
                                                                                              args.unlabeled_batch_size,
-                                                                                             args.unlabeled_batch_size)
+                                                                                             args.unlabeled_batch_size,
+                                                                                         randaug=args.unlabled_randaug)
 
     else :
         raise ValueError("{} not defined".format(dataset_name))
@@ -340,10 +355,13 @@ def create_model(args, model_name, output_dim):
     return model
 
 
-def custom_model_trainer(args, model, ensemble=None):
+def custom_model_trainer(args, model, ensemble=None, logit_type='average'):
     
     if ensemble == True:
-        return MyModelTrainerENS(model)
+        if logit_type == 'average':
+            return MyModelTrainerENS(model)
+        elif logit_type == 'full' :
+            return MyModelTrainerENS_full(model)
     
     if args.dataset == "stackoverflow_lr":
         return MyModelTrainerTAG(model)
@@ -351,6 +369,7 @@ def custom_model_trainer(args, model, ensemble=None):
         return MyModelTrainerNWP(model)
     else: # default model trainer is for classification problem
         return MyModelTrainerCLS(model)
+
 
 
 if __name__ == "__main__":
@@ -391,7 +410,7 @@ if __name__ == "__main__":
     # Note if the model is DNN (e.g., ResNet), the training will be very slow.
     # In this case, please use our FedML distributed version (./fedml_experiments/distributed_fedavg)
     model = create_model(args, model_name=args.model, output_dim=dataset[7])
-    server_model_trainer = custom_model_trainer(args, model, ensemble=True)
+    server_model_trainer = custom_model_trainer(args, model, ensemble=True, logit_type=args.logit_type)
     client_model_trainer = custom_model_trainer(args, model)
     model_trainer = [server_model_trainer, client_model_trainer]
     

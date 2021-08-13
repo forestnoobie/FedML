@@ -6,6 +6,7 @@ import torch.utils.data as data
 import torchvision.transforms as transforms
 
 from .datasets import CIFAR100_truncated
+from ..augmentation import RandAugment
 
 logging.basicConfig()
 logger = logging.getLogger()
@@ -306,13 +307,16 @@ def get_dataloader(dataset, datadir, train_bs, test_bs, dataidxs=None):
 def get_dataloader_test(dataset, datadir, train_bs, test_bs, dataidxs_train, dataidxs_test):
     return get_dataloader_test_CIFAR100(datadir, train_bs, test_bs, dataidxs_train, dataidxs_test)
 
-def get_unlabeled_dataloader_CIFAR100(datadir, train_bs, test_bs, dataidxs=None, num_workers=2):
+def get_unlabeled_dataloader_CIFAR100(datadir, train_bs, test_bs, dataidxs=None, num_workers=2, randaug=False):
     
     # For ensemble distillation return num of train and test
     
     dl_obj = CIFAR100_truncated
 
     transform_train, transform_test = _data_transforms_cifar100()
+    if randaug:
+        transform_train.transforms.insert(3, RandAugment(3,5)) # Need to check the order where the Randaug is inserted
+
 
     train_ds = dl_obj(datadir, dataidxs=dataidxs, train=True, transform=transform_train, download=True)
     test_ds = dl_obj(datadir, train=False, transform=transform_test, download=True)
@@ -326,10 +330,12 @@ def get_unlabeled_dataloader_CIFAR100(datadir, train_bs, test_bs, dataidxs=None,
     
     return train_data_num, test_data_num, train_dl, test_dl    
 
-def get_dataloader_CIFAR100(datadir, train_bs, test_bs, dataidxs=None, num_workers=2):
+def get_dataloader_CIFAR100(datadir, train_bs, test_bs, dataidxs=None, num_workers=2, randaug=False):
     dl_obj = CIFAR100_truncated
 
     transform_train, transform_test = _data_transforms_cifar100()
+    if randaug:
+        transform_train.transforms.insert(3, RandAugment(3,5)) # Need to check the order where the Randaug is inserted
 
     train_ds = dl_obj(datadir, dataidxs=dataidxs, train=True, transform=transform_train, download=True)
     test_ds = dl_obj(datadir, train=False, transform=transform_test, download=True)

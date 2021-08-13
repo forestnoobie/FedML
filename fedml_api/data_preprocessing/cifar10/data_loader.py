@@ -8,13 +8,14 @@ import torch.utils.data as data
 import torchvision.transforms as transforms
 
 from .datasets import CIFAR10_truncated
+from ..augmentation import RandAugment
 
 logging.basicConfig()
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
-# generate the non-IID distribution for all methods
+# generate the non-IID distribution for all methodsƒ
 def read_data_distribution(filename='./data_preprocessing/non-iid-distribution/CIFAR10/distribution.txt'):
     distribution = {}
     with open(filename, 'r') as data:
@@ -216,7 +217,7 @@ def partition_data_equally(dataset, datadir, partition, n_nets, alpha, valid_rat
     elif partition == 'hetero':
         # Divide indicies to smaller groups
 
-        K = 10 ### Number of class!
+        K = 10 ### Number of class  !
         net_dataidx_map = {}
         num_indicies = X_train.shape[0]
         y_indicies = [i for i in range(num_indicies)]
@@ -309,12 +310,15 @@ def get_dataloader_test(dataset, datadir, train_bs, test_bs, dataidxs_train, dat
     return get_dataloader_test_CIFAR10(datadir, train_bs, test_bs, dataidxs_train, dataidxs_test)
 
 
-def get_unlabeled_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None, num_workers=2):
+def get_unlabeled_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None, num_workers=2, randaug=False):
     # For ensemble distillation, shuffle off + return num of train and test
 
     dl_obj = CIFAR10_truncated
 
     transform_train, transform_test = _data_transforms_cifar10()
+
+    if randaug:
+        transform_train.transforms.insert(3, RandAugment(3,5)) # Need to check the order where the Randaug is inserted
 
     train_ds = dl_obj(datadir, dataidxs=dataidxs, train=True, transform=transform_train, download=True)
     test_ds = dl_obj(datadir, train=False, transform=transform_test, download=True)
@@ -329,10 +333,13 @@ def get_unlabeled_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None, 
     return train_data_num, test_data_num, train_dl, test_dl
 
 
-def get_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None, num_workers=2):
+def get_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None, num_workers=2, randaug=True):
     dl_obj = CIFAR10_truncated
 
     transform_train, transform_test = _data_transforms_cifar10()
+    if randaug:
+        transform_train.transforms.insert(3, RandAugment(3,5)) # Need to check the order where the Randaug is inserted
+
 
     train_ds = dl_obj(datadir, dataidxs=dataidxs, train=True, transform=transform_train, download=True)
     test_ds = dl_obj(datadir, train=False, transform=transform_test, download=True)
@@ -414,7 +421,7 @@ def load_partition_data_distributed_cifar10(process_id, dataset, data_dir, parti
 
 
 def load_partition_data_cifar10(dataset, data_dir, partition_method, partition_alpha, client_number,
-                                batch_size, valid_ratio=0.0, split_equally=False):
+                                batch_size, valid_ratio=0.0, split_equally=False, randaug=False):
     if split_equally :
         partitioned_data = partition_data_equally(dataset,
                                                 data_dir,
