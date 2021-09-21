@@ -1,6 +1,7 @@
 import os
 import logging
 import copy
+import random
 
 import numpy as np
 from tqdm import tqdm
@@ -263,6 +264,7 @@ class MyModelTrainer_full_logits(ModelTrainer):
         # Feedforward model in eval mode
         # Need Current round selected clients
         # Get logits but ** don't average them ** !!
+        # Don't collect all the logits from all clients, but random sample one client at a time
 
         selected_client_indexes = self.client_indexes
         flist = os.listdir(self.save_model_dir)
@@ -279,16 +281,19 @@ class MyModelTrainer_full_logits(ModelTrainer):
         data_num = image.size(0)
         model = copy.deepcopy(self.model)
         full_logits = np.zeros((0, self.class_num))
+        num_clients = len(save_paths)
         with torch.no_grad():
-            for path in save_paths:
-                model.cpu().load_state_dict(torch.load(path))
-                model.eval()
-                image = image.to(device)
-                model = model.to(device)
+            sampled_client_idx = random.randint(0, num_clients-1)
+            path = save_paths[sampled_client_idx]
+            model.cpu().load_state_dict(torch.load(path))
+            model.eval()
 
-                logits = model(image)
-                logits = logits.detach().cpu().clone().numpy()
-                full_logits = np.vstack((full_logits, logits))
+            image = image.to(device)
+            model = model.to(device)
+
+            logits = model(image)
+            logits = logits.detach().cpu().clone().numpy()
+            full_logits = np.vstack((full_logits, logits))
 
         full_logits = torch.from_numpy((full_logits))
         full_logits = full_logits.to(device)
@@ -328,9 +333,9 @@ class MyModelTrainer_full_logits(ModelTrainer):
                         # Get average logits from clients
                         full_logits = self.get_logits_from_clients(x, device, args)
 
-    
-                        x = x.unsqueeze(1).expand(-1, args.client_num_per_round, -1, -1, -1)
-                        x = x.reshape( -1 ,3 , w, h )
+                        # For full logit training from all clients
+                        # x = x.unsqueeze(1).expand(-1, args.client_num_per_round, -1, -1, -1)
+                        # x = x.reshape( -1 ,3 , w, h )
 
                         model.zero_grad()
                         output = model(x)
