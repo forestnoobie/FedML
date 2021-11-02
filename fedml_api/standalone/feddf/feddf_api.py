@@ -50,7 +50,43 @@ class FeddfAPI(object):
         self.unlabeled_train_data = unlabeled_train_dl
         self.unlabeled_test_data = unlabeled_test_dl
         self.unlabeled_train_data_num = train_data_num
+        
+        ## Fedmix
+        self.fedmix = args.fedmix
+        if self.fedmix :
+            self.mean_dl = self.get_image_label_mean()
+    
+    def get_image_label_mean(self):
+        
+        image_means, label_means = torch.Tensor().to(args.device), torch.Tensor().to(args.device)
+        
+        for client_idx in client_idxs:
+            image_mean, label_mean = self.generate_mean(client)
+            images_means = torch.cat([image_means, image_mean])
+            label_means = torch.cat([label_means, label_mean])
+             
+        return images_means, label_means
 
+    def generate_mean(self, client_idx):
+        
+        # Setup client
+        client_idx = client_indexes[idx]
+        client.update_local_dataset(client_idx, self.train_data_local_dict[client_idx],
+                                    self.test_data_local_dict[client_idx],
+                                            self.train_data_local_num_dict[client_idx])
+        local_training_data = client.local_training_data
+        
+        # Get mean
+        images_means, labels_means = torch.Tensor().to(self.args.device), torch.Tensor().to(self.args.device)
+        for batch_idx, (images, labels) in enumerate(local_training_data):
+            images, labels = images.to(self.args.device), labels.to(self.args.device)
+            images_mean = torch.mean(images, dim=0).unsqueeze(0)
+            labels_mean = torch.mean(F.one_hot(labels, num_classes=self.args.num_classes).float(), dim=0).unsqueeze(0)
+            images_means = torch.cat([images_means, images_mean], dim=0)
+            labels_means = torch.cat([labels_means, labels_mean], dim=0)
+
+        return images_means, labels_means
+    
     def _setup_clients(self, train_data_local_num_dict, train_data_local_dict, test_data_local_dict, model_trainer):
         logging.info("############setup_clients (START)#############")
         for client_idx in range(self.args.client_num_per_round):
