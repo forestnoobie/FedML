@@ -34,9 +34,11 @@ from fedml_api.model.cv.resnet_gn import resnet18
 from fedml_api.standalone.feddf.feddf_api import FeddfAPI
 from fedml_api.standalone.feddf.my_model_trainer_ensemble import MyModelTrainer as MyModelTrainerENS
 from fedml_api.standalone.feddf.my_model_trainer_ensemble import MyModelTrainer_full_logits as MyModelTrainerENS_full
+from fedml_api.standalone.feddf.my_model_trainer_ensemble import MyModelTrainer_fedmix as MyModelTrainerENS_Fedmix
 from fedml_api.standalone.feddf.my_model_trainer_classification import MyModelTrainer as MyModelTrainerCLS
 from fedml_api.standalone.feddf.my_model_trainer_nwp import MyModelTrainer as MyModelTrainerNWP
 from fedml_api.standalone.feddf.my_model_trainer_tag_prediction import MyModelTrainer as MyModelTrainerTAG
+from fedml_api.standalone.feddf.my_model_trainer_classification_fedmix import MyModelTrainer as MyModelTrainerFedmix
 from utils.utils import set_logger
 
 
@@ -132,7 +134,18 @@ def add_args(parser):
 
     parser.add_argument('--logit_type', type=str, default='average', metavar='LR',
                         help='Type of logit')
+    
+    # For fedmix
 
+    parser.add_argument('--fedmix', help='Use fedmix?',
+                        action='store_true')
+    
+    parser.add_argument('--fedmix_server', help='Use fedmix on Server?',
+                        action='store_true')
+    
+    parser.add_argument('--lam', type=float, default=0.1, help="lambda fixed")
+
+    
     return parser
 
 
@@ -275,7 +288,10 @@ def load_data(args, dataset_name):
         # If validation exist
         valid_data_global = valid_idxs[0]
         dataset.append(valid_data_global)
-
+    
+    ## class_num
+    args.class_num = class_num
+    
     return dataset
 
 def load_unlabeled_data(args, dataset_name):
@@ -357,11 +373,18 @@ def create_model(args, model_name, output_dim):
 
 def custom_model_trainer(args, model, ensemble=None, logit_type='average'):
     
+
+    
     if ensemble == True:
+        
+        if args.fedmix_server :
+            return MyModelTrainerENS_Fedmix(model)
         if logit_type == 'average':
             return MyModelTrainerENS(model)
         elif logit_type == 'full' :
             return MyModelTrainerENS_full(model)
+    elif args.fedmix :
+            return MyModelTrainerFedmix(model)
     
     if args.dataset == "stackoverflow_lr":
         return MyModelTrainerTAG(model)
@@ -380,7 +403,7 @@ if __name__ == "__main__":
     wandb.init(
         project="fedml-df",
         name="FedDF-r" + str(args.comm_round) + "-e" + str(args.epochs) + "-lr" + str(args.lr) +
-             "-alpha" + str(args.partition_alpha) + "-unlabel" + str(args.unlabeled_dataset),
+             "-alpha" + str(args.partition_alpha) + "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix), 
         config=args
     )
 

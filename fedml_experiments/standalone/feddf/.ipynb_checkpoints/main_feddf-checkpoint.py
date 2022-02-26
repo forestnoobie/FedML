@@ -10,6 +10,7 @@ import wandb
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "../../../")))
 
+from fedml_api.data_preprocessing.svhn.data_loader import load_partition_data_svhn, get_unlabeled_dataloader_SVHN
 from fedml_api.data_preprocessing.cifar10.data_loader import load_partition_data_cifar10, get_unlabeled_dataloader_CIFAR10
 from fedml_api.data_preprocessing.cifar100.data_loader import load_partition_data_cifar100, get_unlabeled_dataloader_CIFAR100
 from fedml_api.data_preprocessing.cinic10.data_loader import load_partition_data_cinic10
@@ -21,7 +22,7 @@ from fedml_api.data_preprocessing.stackoverflow_nwp.data_loader import load_part
 from fedml_api.data_preprocessing.ImageNet.data_loader import load_partition_data_ImageNet
 from fedml_api.data_preprocessing.Landmarks.data_loader import load_partition_data_landmarks
 from fedml_api.model.cv.mobilenet import mobilenet
-from fedml_api.model.cv.resnet import resnet56
+from fedml_api.model.cv.resnet import resnet56, resnet8
 from fedml_api.model.cv.cnn import CNN_DropOut
 from fedml_api.data_preprocessing.FederatedEMNIST.data_loader import load_partition_data_federated_emnist
 from fedml_api.model.nlp.rnn import RNN_OriginalFedAvg, RNN_StackOverFlow
@@ -32,10 +33,13 @@ from fedml_api.model.cv.resnet_gn import resnet18
 
 from fedml_api.standalone.feddf.feddf_api import FeddfAPI
 from fedml_api.standalone.feddf.my_model_trainer_ensemble import MyModelTrainer as MyModelTrainerENS
+from fedml_api.standalone.feddf.my_model_trainer_ensemble import MyModelTrainer_full_logits as MyModelTrainerENS_full
+from fedml_api.standalone.feddf.my_model_trainer_ensemble import MyModelTrainer_fedmix as MyModelTrainerENS_Fedmix
 from fedml_api.standalone.feddf.my_model_trainer_classification import MyModelTrainer as MyModelTrainerCLS
 from fedml_api.standalone.feddf.my_model_trainer_nwp import MyModelTrainer as MyModelTrainerNWP
 from fedml_api.standalone.feddf.my_model_trainer_tag_prediction import MyModelTrainer as MyModelTrainerTAG
-
+from fedml_api.standalone.feddf.my_model_trainer_classification_fedmix import MyModelTrainer as MyModelTrainerFedmix
+from utils.utils import set_logger
 
 
 def add_args(parser):
@@ -49,11 +53,8 @@ def add_args(parser):
 
     parser.add_argument('--dataset', type=str, default='cifar10', metavar='N',
                         help='dataset used for training')
-    
-    parser.add_argument('--unlabeled_dataset', type=str, default='cifar10', metavar='N',
-                        help='Unlabeled dataset used for ensemble')
 
-    parser.add_argument('--data_dir', type=str, default='./../../../data/cifar10',
+    parser.add_argument('--data_dir', type=str, default='./../../../data/',
                         help='data directory')
 
     parser.add_argument('--partition_method', type=str, default='hetero', metavar='N',
@@ -93,7 +94,57 @@ def add_args(parser):
 
     parser.add_argument('--ci', type=int, default=0,
                         help='CI')
+
+    parser.add_argument('--seed', type=int, default=0,
+                        help="Seed")
+
+    parser.add_argument('--split_equally', help='Split equally?',
+                        action='store_true')
+
+    # For Multi augmentation
+
+    parser.add_argument('--randaug', help='Use rand aug for labeled dataset (clients)',
+                        action='store_true')
+
+    parser.add_argument('--unlabeled_randaug', help='Use rand aug for unlabeled dataset (server)',
+                        action='store_true')
+
+    # For Ensemble distillation
+
+    parser.add_argument('--unlabeled_data_dir', type=str, default='', metavar='N',
+                        help='Unlabeled dataset used for ensemble')
+
+    parser.add_argument('--unlabeled_dataset', type=str, default='cifar100', metavar='N',
+                        help='Unlabeled dataset used for ensemble')
+
+    parser.add_argument('--unlabeled_batch_size', type=int, default=128, metavar='N',
+                        help='input batch size for training (default: 128)')
+
+    parser.add_argument('--server_steps', type=int, default=1e4, metavar='EP',
+                        help='how many steps will be trained in the server')
+
+    parser.add_argument('--server_patience_steps', type=int, default=1e3, metavar='EP',
+                        help='how many steps will be trained in the server without increase in val acc')
+
+    parser.add_argument('--server_lr', type=float, default=0.001, metavar='LR',
+                        help='learning rate on server (default: 0.001)')
+
+    parser.add_argument('--valid_ratio', type=float, default=0.0, metavar='LR',
+                        help='Ratio of validation set')
+
+    parser.add_argument('--logit_type', type=str, default='average', metavar='LR',
+                        help='Type of logit')
     
+    # For fedmix
+
+    parser.add_argument('--fedmix', help='Use fedmix?',
+                        action='store_true')
+    
+    parser.add_argument('--fedmix_server', help='Use fedmix on Server?',
+                        action='store_true')
+    
+    parser.add_argument('--lam', type=float, default=0.1, help="lambda fixed")
+
     
     return parser
 
@@ -205,11 +256,13 @@ def load_data(args, dataset_name):
         elif dataset_name == "cinic10":
             data_loader = load_partition_data_cinic10
         else:
-            data_loader = load_partition_data_cifar10
+            raise ValueError("dataset {} has not been defined".format(dataset_name))
+
         train_data_num, test_data_num, train_data_global, test_data_global, \
         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
-        class_num = data_loader(args.dataset, args.data_dir, args.partition_method,
-                                args.partition_alpha, args.client_num_in_total, args.batch_size)
+        class_num, *valid_idxs = data_loader(args.dataset, args.data_dir, args.partition_method,
+                                args.partition_alpha, args.client_num_in_total, args.batch_size,
+                                             args.valid_ratio, split_equally=args.split_equally, randaug=args.randaug)
 
     if centralized:
         train_data_local_num_dict = {
@@ -230,17 +283,44 @@ def load_data(args, dataset_name):
 
     dataset = [train_data_num, test_data_num, train_data_global, test_data_global,
                train_data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num]
+
+    if valid_idxs:
+        # If validation exist
+        valid_data_global = valid_idxs[0]
+        dataset.append(valid_data_global)
+    
+    ## class_num
+    args.class_num = class_num
+    
     return dataset
 
-def load_unlabeled_dataset(args, dataset_name):
+def load_unlabeled_data(args, dataset_name):
+
+    logging.info("{} as unlabeled dataset".format(dataset_name))
+    # Unlabeled data dir
+    if args.unlabeled_data_dir == "":
+        args.unlabeled_data_dir = args.data_dir
+
     
     if dataset_name == "cifar10":
-        train_data_num, test_data_num, train_dl, test_dl = get_unlabeled_dataloader_CIFAR10
+        train_data_num, test_data_num, train_dl, test_dl = get_unlabeled_dataloader_CIFAR10(args.unlabeled_data_dir,
+                                                                                            args.unlabeled_batch_size,
+                                                                                            args.unlabeled_batch_size,
+                                                                                            randaug=args.unlabeled_randaug)
     elif dataset_name == "cifar100":
-        train_data_num, test_data_num, train_dl, test_dl = get_unlabeled_dataloader_CIFAR100
-    else : 
+        train_data_num, test_data_num, train_dl, test_dl = get_unlabeled_dataloader_CIFAR100(args.unlabeled_data_dir,
+                                                                                            args.unlabeled_batch_size,
+                                                                                            args.unlabeled_batch_size,
+                                                                                            randaug=args.unlabeled_randaug)
+    elif dataset_name == "svhn":
+        train_data_num, test_data_num, train_dl, test_dl = get_unlabeled_dataloader_SVHN(args.unlabeled_data_dir,
+                                                                                             args.unlabeled_batch_size,
+                                                                                             args.unlabeled_batch_size,
+                                                                                         randaug=args.unlabled_randaug)
+
+    else :
         raise ValueError("{} not defined".format(dataset_name))
-    
+
     dataset = [train_data_num, test_data_num, train_dl, test_dl]
     
     return dataset
@@ -283,13 +363,28 @@ def create_model(args, model_name, output_dim):
         model = resnet56(class_num=output_dim)
     elif model_name == "mobilenet":
         model = mobilenet(class_num=output_dim)
+    elif model_name == "resnet8":
+        model = resnet8(class_num=output_dim)
+    else :
+        raise ValueError("No model name {}".format(model_name))
+
     return model
 
 
-def custom_model_trainer(args, model, ensemble=None):
+def custom_model_trainer(args, model, ensemble=None, logit_type='average'):
     
-    if ensemble=True:
-        return MyModelTrainerENS(model)
+
+    
+    if ensemble == True:
+        
+        if args.fedmix_server :
+            return MyModelTrainerENS_Fedmix(model)
+        if logit_type == 'average':
+            return MyModelTrainerENS(model)
+        elif logit_type == 'full' :
+            return MyModelTrainerENS_full(model)
+    elif args.fedmix :
+            return MyModelTrainerFedmix(model)
     
     if args.dataset == "stackoverflow_lr":
         return MyModelTrainerTAG(model)
@@ -299,30 +394,35 @@ def custom_model_trainer(args, model, ensemble=None):
         return MyModelTrainerCLS(model)
 
 
+
 if __name__ == "__main__":
-    logging.basicConfig()
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
 
     parser = add_args(argparse.ArgumentParser(description='FedAvg-standalone'))
     args = parser.parse_args()
-    logger.info(args)
-    device = torch.device("cuda:" + str(args.gpu) if torch.cuda.is_available() else "cpu")
-    logger.info(device)
 
     wandb.init(
-        project="fedml",
-        name="FedDF-r" + str(args.comm_round) + "-e" + str(args.epochs) + "-lr" + str(args.lr) + "-alpha" + str(args.partition_alpha),
+        project="fedml-df",
+        name="FedDF-r" + str(args.comm_round) + "-e" + str(args.epochs) + "-lr" + str(args.lr) +
+             "-alpha" + str(args.partition_alpha) + "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix), 
         config=args
     )
+
+    # Set Logger
+    wandb_save_dir = '/'.join(wandb.run.dir.split('/')[-3:])
+    set_logger(os.path.join(wandb_save_dir, 'log.log'))
+    args.wandb_save_dir = wandb_save_dir
+    logging.info(args)
+    device = torch.device("cuda:" + str(args.gpu) if torch.cuda.is_available() else "cpu")
+    logging.info(device)
+
 
     # Set the random seed. The np.random seed determines the dataset partition.
     # The torch_manual_seed determines the initial weight.
     # We fix these two, so that we can reproduce the result.
-    random.seed(0)
-    np.random.seed(0)
-    torch.manual_seed(0)
-    torch.cuda.manual_seed_all(0)
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
     torch.backends.cudnn.deterministic = True
 
     # load data and unlabeled data
@@ -333,11 +433,11 @@ if __name__ == "__main__":
     # Note if the model is DNN (e.g., ResNet), the training will be very slow.
     # In this case, please use our FedML distributed version (./fedml_experiments/distributed_fedavg)
     model = create_model(args, model_name=args.model, output_dim=dataset[7])
-    server_model_trainer = custom_model_trainer(args, model, ensemble=True)
+    server_model_trainer = custom_model_trainer(args, model, ensemble=True, logit_type=args.logit_type)
     client_model_trainer = custom_model_trainer(args, model)
     model_trainer = [server_model_trainer, client_model_trainer]
     
     logging.info(model)
 
-    feddfAPI = FedDFAPI(dataset, unlabeled_dataset, device, args, model_trainer)
+    feddfAPI = FeddfAPI(dataset, unlabeled_dataset, device, args, model_trainer)
     feddfAPI.train()
