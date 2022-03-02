@@ -30,7 +30,10 @@ class Client:
                              
     def train(self, w_global):
         self.model_trainer.set_model_params(w_global)
-        self.model_trainer.train(self.local_training_data, self.device, self.args)
+        if self.args.fedmix :
+            self.model_trainer.train(self.local_training_data, self.average_data, self.device, self.args)
+        else :
+            self.model_trainer.train(self.local_training_data, self.device, self.args)
         weights = self.model_trainer.get_model_params()
         return weights
 
@@ -41,3 +44,6 @@ class Client:
             test_data = self.local_training_data
         metrics = self.model_trainer.test(test_data, self.device, self.args)
         return metrics
+
+    def update_average_dataset(self, average_data) :
+        self.average_data = average_data

@@ -4,9 +4,14 @@ import random
 import os
 from _collections import defaultdict
 
-import numpy as np
+import numpy as nps
 import torch
 import wandb
+from torch.nn import functional as F
+import numpy as np
+import math
+from torch import nn
+from torch.utils.data import DataLoader, Dataset
 
 from fedml_api.standalone.feddf.client import Client
 
@@ -52,39 +57,40 @@ class FeddfAPI(object):
         self.unlabeled_train_data_num = train_data_num
         
         ## Fedmix
-        self.fedmix = args.fedmix
-        if self.fedmix :
-            self.mean_dl = self.get_image_label_mean()
+        self.fedmix = False
+        if args.fedmix or args.fedmix_server:
+            self.fedmix = True
+            self.average_data = self.get_image_label_mean()
     
     def get_image_label_mean(self):
         
-        image_means, label_means = torch.Tensor().to(args.device), torch.Tensor().to(args.device)
+        images_means, labels_means = torch.Tensor().to(self.device), torch.Tensor().to(self.device)
         
-        for client_idx in client_idxs:
-            image_mean, label_mean = self.generate_mean(client)
-            images_means = torch.cat([image_means, image_mean])
-            label_means = torch.cat([label_means, label_mean])
-             
-        return images_means, label_means
+        for client_idx in range(self.args.client_num_in_total):
+            image_mean, label_mean = self.generate_mean(client_idx)
+            images_means = torch.cat([images_means, image_mean])
+            labels_means = torch.cat([labels_means, label_mean])
+        
+        return images_means, labels_means
 
     def generate_mean(self, client_idx):
         
+        c = self.client_list[0] #  We just need the client instance, which one doesn't matter
         # Setup client
-        client_idx = client_indexes[idx]
-        client.update_local_dataset(client_idx, self.train_data_local_dict[client_idx],
+        c.update_local_dataset(client_idx, self.train_data_local_dict[client_idx],
                                     self.test_data_local_dict[client_idx],
                                             self.train_data_local_num_dict[client_idx])
-        local_training_data = client.local_training_data
+        local_training_data = c.local_training_data
         
         # Get mean
-        images_means, labels_means = torch.Tensor().to(self.args.device), torch.Tensor().to(self.args.device)
+        images_means, labels_means = torch.Tensor().to(self.device), torch.Tensor().to(self.device)
         for batch_idx, (images, labels) in enumerate(local_training_data):
-            images, labels = images.to(self.args.device), labels.to(self.args.device)
+            images, labels = images.to(self.device), labels.to(self.device)
             images_mean = torch.mean(images, dim=0).unsqueeze(0)
-            labels_mean = torch.mean(F.one_hot(labels, num_classes=self.args.num_classes).float(), dim=0).unsqueeze(0)
+            labels_mean = torch.mean(F.one_hot(labels, num_classes=self.class_num).float(), dim=0).unsqueeze(0)
             images_means = torch.cat([images_means, images_mean], dim=0)
             labels_means = torch.cat([labels_means, labels_mean], dim=0)
-
+        
         return images_means, labels_means
     
     def _setup_clients(self, train_data_local_num_dict, train_data_local_dict, test_data_local_dict, model_trainer):
@@ -132,12 +138,16 @@ class FeddfAPI(object):
                                                    self.args.client_num_per_round)
             logging.info("client_indexes = " + str(client_indexes))
 
-            for idx, client in enumerate(self.client_list):
+            for idx, client in enumerate(self.client_list):# self.client_list is not important actually..
                 # update dataset
                 client_idx = client_indexes[idx]
                 client.update_local_dataset(client_idx, self.train_data_local_dict[client_idx],
                                             self.test_data_local_dict[client_idx],
                                             self.train_data_local_num_dict[client_idx])
+                
+                # For fedmix
+                if self.args.fedmix:
+                    client.update_average_dataset(self.average_data)
 
                 # train on new dataset
                 w = client.train(copy.deepcopy(w_global))
@@ -215,7 +225,11 @@ class FeddfAPI(object):
 
         unlabeled_dataloader = self.unlabeled_train_data
         unlabeled_dataloader.dataset.target = avg_logits.detach().cpu().numpy()
-        round_server_val_acc = self.model_trainer.train(unlabeled_dataloader, self.val_global, self.device, self.args)
+        
+        if self.args.fedmix_server:
+            round_server_val_acc = self.model_trainer.train(unlabeled_dataloader, self.average_data, self.val_global, self.device, self.args)
+        else : 
+            round_server_val_acc = self.model_trainer.train(unlabeled_dataloader, self.val_global, self.device, self.args)
 
         wandb.log({"Server/val/Acc": round_server_val_acc, "round": round_idx})
         stats['server_val_acc'] = round_server_val_acc

@@ -1,5 +1,5 @@
 import logging
-
+import torch
 
 class Client:
 
@@ -15,7 +15,7 @@ class Client:
         self.device = device
         self.model_trainer = model_trainer
 
-    def update_local_dataset(self, client_idx, local_training_data, local_test_data, local_sample_numbe
+    def update_local_dataset(self, client_idx, local_training_data, local_test_data, local_sample_number):
         self.model_trainer.id = client_idx
         self.client_idx = client_idx
         self.local_training_data = local_training_data
@@ -25,9 +25,15 @@ class Client:
     def get_sample_number(self):
         return self.local_sample_number
 
+    def get_logits(self, test_data):
+        return self.model_trainer.get_logits(test_data, self.device, self.args)
+                             
     def train(self, w_global):
         self.model_trainer.set_model_params(w_global)
-        self.model_trainer.train(self.local_training_data, self.device, self.args)
+        if self.args.fedmix :
+            self.model_trainer.train(self.local_training_data, self.average_data, self.device, self.args)
+        else :
+            self.model_trainer.train(self.local_training_data, self.device, self.args)
         weights = self.model_trainer.get_model_params()
         return weights
 
@@ -38,3 +44,6 @@ class Client:
             test_data = self.local_training_data
         metrics = self.model_trainer.test(test_data, self.device, self.args)
         return metrics
+
+    def update_average_dataset(self, average_data) :
+        self.average_data = average_data

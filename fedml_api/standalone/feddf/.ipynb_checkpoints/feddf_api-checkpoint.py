@@ -1,10 +1,17 @@
 import copy
 import logging
 import random
+import os
+from _collections import defaultdict
 
-import numpy as np
+import numpy as nps
 import torch
 import wandb
+from torch.nn import functional as F
+import numpy as np
+import math
+from torch import nn
+from torch.utils.data import DataLoader, Dataset
 
 from fedml_api.standalone.feddf.client import Client
 
@@ -14,26 +21,78 @@ class FeddfAPI(object):
         self.device = device
         self.args = args
         [train_data_num, test_data_num, train_data_global, test_data_global,
-         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num] = dataset
+         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num, \
+                                                                        *valid_data_global] = dataset
         self.train_global = train_data_global
         self.test_global = test_data_global
         self.val_global = None
+        if valid_data_global:
+            self.val_global = valid_data_global[0]
         self.train_data_num_in_total = train_data_num
         self.test_data_num_in_total = test_data_num
+        self.class_num = class_num
 
         self.client_list = []
         self.train_data_local_num_dict = train_data_local_num_dict
         self.train_data_local_dict = train_data_local_dict
         self.test_data_local_dict = test_data_local_dict
 
+        ## For tracking best acc
+        self._stats = defaultdict(int)
+
+        ## For saving model directory
+        self.save_model_dir = os.path.join(args.wandb_save_dir, "./model_parameters")
+        os.makedirs(self.save_model_dir, exist_ok=True)
+
         [server_model_trainer, client_model_trainer] = model_trainer
         self.model_trainer = server_model_trainer
+        self.model_trainer.save_model_dir = self.save_model_dir
+        self.model_trainer.class_num = class_num
         self._setup_clients(train_data_local_num_dict, train_data_local_dict, test_data_local_dict, client_model_trainer)
-        
+
         ## Distillation Fusion
         [train_data_num, test_data_num, unlabeled_train_dl, unlabeled_test_dl] = unlabeled_dataset
-        self._setup_avg_logits(unlabeled_data, train_num, class_num)  # class_num of labeled dataset
+        self.unlabeled_train_data = unlabeled_train_dl
+        self.unlabeled_test_data = unlabeled_test_dl
+        self.unlabeled_train_data_num = train_data_num
+        
+        ## Fedmix
+        self.fedmix = False
+        if args.fedmix or args.fedmix_server:
+            self.fedmix = True
+            self.average_data = self.get_image_label_mean()
+    
+    def get_image_label_mean(self):
+        
+        images_means, labels_means = torch.Tensor().to(self.device), torch.Tensor().to(self.device)
+        
+        for client_idx in range(self.args.client_num_in_total):
+            image_mean, label_mean = self.generate_mean(client_idx)
+            images_means = torch.cat([images_means, image_mean])
+            labels_means = torch.cat([labels_means, label_mean])
+        
+        return images_means, labels_means
 
+    def generate_mean(self, client_idx):
+        
+        c = self.client_list[0] #  We just need the client instance, which one doesn't matter
+        # Setup client
+        c.update_local_dataset(client_idx, self.train_data_local_dict[client_idx],
+                                    self.test_data_local_dict[client_idx],
+                                            self.train_data_local_num_dict[client_idx])
+        local_training_data = c.local_training_data
+        
+        # Get mean
+        images_means, labels_means = torch.Tensor().to(self.device), torch.Tensor().to(self.device)
+        for batch_idx, (images, labels) in enumerate(local_training_data):
+            images, labels = images.to(self.device), labels.to(self.device)
+            images_mean = torch.mean(images, dim=0).unsqueeze(0)
+            labels_mean = torch.mean(F.one_hot(labels, num_classes=self.class_num).float(), dim=0).unsqueeze(0)
+            images_means = torch.cat([images_means, images_mean], dim=0)
+            labels_means = torch.cat([labels_means, labels_mean], dim=0)
+        
+        return images_means, labels_means
+    
     def _setup_clients(self, train_data_local_num_dict, train_data_local_dict, test_data_local_dict, model_trainer):
         logging.info("############setup_clients (START)#############")
         for client_idx in range(self.args.client_num_per_round):
@@ -42,22 +101,34 @@ class FeddfAPI(object):
             self.client_list.append(c)
         logging.info("############setup_clients (END)#############")
 
-    def _setup_avg_logits(self, unlabeled_data, train_data_num, class_num):
-        # Empty
-        avg_logits = torch.zeros(train_data_num, class_num)
-        return avg_logits
-        
-        
-        
+
+    def _init_logits(self):
+        init_logits = torch.zeros(self.unlabeled_train_data_num, self.class_num, device=self.device)
+        return init_logits
+
+    def _update_stats(self, stats):
+        past_stats = self._stats
+
+        for k, v in stats.items():
+            if "best_" + k not in past_stats.keys(): # Default value
+                past_stats["best_" + k] = v
+
+            if 'acc' in k :
+                max_value = max(v, past_stats["best_" + k])
+                past_stats["best_" + k] = max_value
+            elif 'loss' in k :
+                min_value = min(v, past_stats["best_" + k])
+                past_stats["best_" + k] = min_value
+
+        logging.info(past_stats)
+
     def train(self):
         w_global = self.model_trainer.get_model_params()
         for round_idx in range(self.args.comm_round):
-
             logging.info("################Communication round : {}".format(round_idx))
 
-            w_locals = []
-            avg_logits = [] # N * C \ N : number of unlabeled dataset,  C : number of classes of labeled dataset
-            avg_logits = self.init_avg_logits()
+            w_locals = [] # N * C \ N : number of unlabeled dataset,  C : number of classes of labeled dataset
+            avg_logits = self._init_logits() # For offline dataloader
 
             """
             for scalability: following the original FedAvg algorithm, we uniformly sample a fraction of clients in each round.
@@ -67,30 +138,35 @@ class FeddfAPI(object):
                                                    self.args.client_num_per_round)
             logging.info("client_indexes = " + str(client_indexes))
 
-            for idx, client in enumerate(self.client_list):
+            for idx, client in enumerate(self.client_list):# self.client_list is not important actually..
                 # update dataset
                 client_idx = client_indexes[idx]
                 client.update_local_dataset(client_idx, self.train_data_local_dict[client_idx],
                                             self.test_data_local_dict[client_idx],
                                             self.train_data_local_num_dict[client_idx])
+                
+                # For fedmix
+                if self.args.fedmix:
+                    client.update_average_dataset(self.average_data)
 
                 # train on new dataset
                 w = client.train(copy.deepcopy(w_global))
                 w_locals.append((client.get_sample_number(), copy.deepcopy(w)))
-                
-                ############ Gather Average Logits
-                client.update_local_dataset(client_idx, self.unlabeled_train_data,
-                                           self.unlabeled_test_data,
-                                           self.unlabeled_data_num)
-                avg_logits += client.get_logits()
-            
-            
-            avg_logits /= len(self.client_list)
-            # update global weights with average logits
-            self._ensemble_distillation(avg_logits)
 
-#             w_global = self._aggregate(w_locals)
-#             self.model_trainer.set_model_params(w_global)
+                # Save model
+                client.model_trainer.save_model(self.save_model_dir)
+                
+                # Gather average Logits for offline logits
+                # avg_logits += client.get_logits(self.unlabeled_train_data)
+
+            # Initialize model fusion with aggregated w_global
+            w_global = self._aggregate(w_locals)
+            self.model_trainer.set_model_params(w_global)
+
+            # update global weights with average logits
+            avg_logits /= len(self.client_list)
+            self._ensemble_distillation(round_idx, avg_logits)
+            w_global = self.model_trainer.get_model_params()
 
             # test results
             # at last round
@@ -111,26 +187,54 @@ class FeddfAPI(object):
             np.random.seed(round_idx)  # make sure for each comparison, we are selecting the same clients each round
             client_indexes = np.random.choice(range(client_num_in_total), num_clients, replace=False)
         logging.info("client_indexes = %s" % str(client_indexes))
+        self.model_trainer.client_indexes = client_indexes
+
         return client_indexes
 
-    def _generate_validation_set(self, num_samples=10000):
-        test_data_num = len(self.test_global.dataset)
-        sample_indices = random.sample(range(test_data_num), min(num_samples, test_data_num))
-        subset = torch.utils.data.Subset(self.test_global.dataset, sample_indices)
-        sample_testset = torch.utils.data.DataLoader(subset, batch_size=self.args.batch_size)
-        self.val_global = sample_testset
+    def _aggregate(self, w_locals):
+        training_num = 0
+        for idx in range(len(w_locals)):
+            (sample_num, averaged_params) = w_locals[idx]
+            training_num += sample_num
+
+        (sample_num, averaged_params) = w_locals[0]
+        for k in averaged_params.keys():
+            for i in range(0, len(w_locals)):
+                local_sample_number, local_model_params = w_locals[i]
+                w = local_sample_number / training_num
+                if i == 0:
+                    averaged_params[k] = local_model_params[k] * w
+                else:
+                    averaged_params[k] += local_model_params[k] * w
+        return averaged_params
+
+
+    # def _generate_validation_set(self, num_samples=10000):
+    #     test_data_num = len(self.test_global.dataset)
+    #     sample_indices = random.sample(range(test_data_num), min(num_samples, test_data_num))
+    #     subset = torch.utils.data.Subset(self.test_global.dataset, sample_indices)
+    #     sample_testset = torch.utils.data.DataLoader(subset, batch_size=self.args.batch_size)
+    #     self.val_global = sample_testset
         
-    def _ensemble_distillation(self, avg_logits):
-           
-        #########
-        # 1. Load unlabeled dataset (unshuffled)
-        # 2. Collect logits and average them
-        # 3.
-    
-        unlabeled_dataset = self.unlabeled_dataset
-        unlabeled_dataset.labels = avg_logits
-        self.model_trainer.train(unlabeled_dataset, self.device, self.args)            
+    def _ensemble_distillation(self, round_idx, avg_logits):
+
+        stats = {
+            'round_idx' : round_idx,
+            'server_val_acc' : 0
+        }
+
+        unlabeled_dataloader = self.unlabeled_train_data
+        unlabeled_dataloader.dataset.target = avg_logits.detach().cpu().numpy()
         
+        if self.args.fedmix_server:
+            round_server_val_acc = self.model_trainer.train(unlabeled_dataloader, self.average_data, self.val_global, self.device, self.args)
+        else : 
+            round_server_val_acc = self.model_trainer.train(unlabeled_dataloader, self.val_global, self.device, self.args)
+
+        wandb.log({"Server/val/Acc": round_server_val_acc, "round": round_idx})
+        stats['server_val_acc'] = round_server_val_acc
+        logging.info(stats)
+
 
     def _local_test_on_all_clients(self, round_idx):
 
@@ -191,11 +295,13 @@ class FeddfAPI(object):
         wandb.log({"Train/Acc": train_acc, "round": round_idx})
         wandb.log({"Train/Loss": train_loss, "round": round_idx})
         logging.info(stats)
+        self._update_stats(stats)
 
         stats = {'test_acc': test_acc, 'test_loss': test_loss}
         wandb.log({"Test/Acc": test_acc, "round": round_idx})
         wandb.log({"Test/Loss": test_loss, "round": round_idx})
         logging.info(stats)
+        self._update_stats(stats)
 
     def _local_test_on_validation_set(self, round_idx):
 
