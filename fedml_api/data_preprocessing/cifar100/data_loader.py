@@ -186,7 +186,7 @@ def partition_data_equally(dataset, datadir, partition, n_nets, alpha, valid_rat
     logging.info("*********partition data equally***************")
     n_auxi_nets = 10
     assert n_auxi_nets <= n_nets
-    X_train, y_train, X_test, y_test = load_cifar10_data(datadir)
+    X_train, y_train, X_test, y_test = load_cifar100_data(datadir)
     n_train = X_train.shape[0]
     # n_test = X_test.shape[0]
     total_idxs = np.random.permutation(n_train)
