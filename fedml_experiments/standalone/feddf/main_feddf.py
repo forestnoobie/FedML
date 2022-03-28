@@ -144,6 +144,14 @@ def add_args(parser):
                         action='store_true')
     
     parser.add_argument('--lam', type=float, default=0.1, help="lambda fixed")
+    
+    # For Dataset Condensation
+    
+    parser.add_argument('--condense', help='Condensing?',
+                        action='store_true')
+    
+    parser.add_argument('--image_per_class', help="Condense image per class",
+                       type=int, default=0)
 
     
     return parser
@@ -160,6 +168,9 @@ def load_data(args, dataset_name):
         args.batch_size = 128  # temporary batch size
     else:
         full_batch = False
+        
+    # Channels for condensation
+    args.channel = 3
 
     if dataset_name == "mnist":
         logging.info("load_data. dataset_name = %s" % dataset_name)
@@ -171,6 +182,7 @@ def load_data(args, dataset_name):
         we uniformly sample a fraction of clients each round (as the original FedAvg paper)
         """
         args.client_num_in_total = client_num
+        args.channel = 1
 
     elif dataset_name == "femnist":
         logging.info("load_data. dataset_name = %s" % dataset_name)
@@ -262,8 +274,9 @@ def load_data(args, dataset_name):
         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num, *valid_idxs = data_loader(args.dataset, args.data_dir, args.partition_method,
                                 args.partition_alpha, args.client_num_in_total, args.batch_size,
-                                             args.valid_ratio, split_equally=args.split_equally, randaug=args.randaug)
-
+                                             args.valid_ratio, split_equally=args.split_equally, randaug=args.randaug, condense=args.condense)    
+        
+        
     if centralized:
         train_data_local_num_dict = {
             0: sum(user_train_data_num for user_train_data_num in train_data_local_num_dict.values())}
@@ -288,6 +301,15 @@ def load_data(args, dataset_name):
         # If validation exist
         valid_data_global = valid_idxs[0]
         dataset.append(valid_data_global)
+    
+    if args.condense :
+        
+        if len(valid_idxs) == 2 :
+            data_local_noaug = valid_idxs[1]
+        else : 
+            data_local_noaug = valid_idxs[0]
+        dataset.append(data_local_noaug)
+        
     
     ## class_num
     args.class_num = class_num

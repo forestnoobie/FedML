@@ -26,11 +26,23 @@ class FeddfAPI(object):
         self.train_global = train_data_global
         self.test_global = test_data_global
         self.val_global = None
-        if valid_data_global:
+        train_data_local_noaug_dict = None
+        
+        # Divide valid and condense
+        if args.valid_ratio > 0 and args.condense:
             self.val_global = valid_data_global[0]
+            train_data_local_noaug_dict = valid_data_global[1]
+        elif not args.valid_ratio > 0  and args.condense:
+            train_data_local_noaug_dict = valid_data_global[0]
+        elif args.valid_ratio > 0 and args.condense is False:
+            self.val_global = valid_data_global[0]
+        else :
+            pass
+            
         self.train_data_num_in_total = train_data_num
         self.test_data_num_in_total = test_data_num
         self.class_num = class_num
+        
 
         self.client_list = []
         self.train_data_local_num_dict = train_data_local_num_dict
@@ -44,12 +56,6 @@ class FeddfAPI(object):
         self.save_model_dir = os.path.join(args.wandb_save_dir, "./model_parameters")
         os.makedirs(self.save_model_dir, exist_ok=True)
 
-        [server_model_trainer, client_model_trainer] = model_trainer
-        self.model_trainer = server_model_trainer
-        self.model_trainer.save_model_dir = self.save_model_dir
-        self.model_trainer.class_num = class_num
-        self._setup_clients(train_data_local_num_dict, train_data_local_dict, test_data_local_dict, client_model_trainer)
-
         ## Distillation Fusion
         [train_data_num, test_data_num, unlabeled_train_dl, unlabeled_test_dl] = unlabeled_dataset
         self.unlabeled_train_data = unlabeled_train_dl
@@ -61,6 +67,23 @@ class FeddfAPI(object):
         if args.fedmix or args.fedmix_server:
             self.fedmix = True
             self.average_data = self.get_image_label_mean()
+        
+        ## Condense
+        if args.condense :
+            self.condense = True
+            self.syn_data = dict()
+            self.train_data_local_noaug_dict = train_data_local_noaug_dict
+            self.save_condense_dir = os.path.join(args.wandb_save_dir, "./condense")
+            os.makedirs(self.save_condense_dir, exist_ok=True)
+        
+        [server_model_trainer, client_model_trainer] = model_trainer
+        self.model_trainer = server_model_trainer
+        self.model_trainer.save_model_dir = self.save_model_dir
+        self.model_trainer.class_num = class_num
+
+        self._setup_clients(train_data_local_num_dict, train_data_local_dict, test_data_local_dict, client_model_trainer)
+
+
     
     def get_image_label_mean(self):
         
@@ -98,6 +121,9 @@ class FeddfAPI(object):
         for client_idx in range(self.args.client_num_per_round):
             c = Client(client_idx, train_data_local_dict[client_idx], test_data_local_dict[client_idx],
                        train_data_local_num_dict[client_idx], self.args, self.device, model_trainer)
+            if self.condense:
+                c.update_local_noaug_dataset(self.train_data_local_noaug_dict[client_idx])
+            
             self.client_list.append(c)
         logging.info("############setup_clients (END)#############")
 
@@ -137,24 +163,32 @@ class FeddfAPI(object):
             client_indexes = self._client_sampling(round_idx, self.args.client_num_in_total,
                                                    self.args.client_num_per_round)
             logging.info("client_indexes = " + str(client_indexes))
-
             for idx, client in enumerate(self.client_list):# self.client_list is not important actually..
                 # update dataset
                 client_idx = client_indexes[idx]
                 client.update_local_dataset(client_idx, self.train_data_local_dict[client_idx],
                                             self.test_data_local_dict[client_idx],
                                             self.train_data_local_num_dict[client_idx])
+                if self.condense:
+                    client.update_local_noaug_dataset(self.train_data_local_noaug_dict[client_idx])
+                
                 
                 # For fedmix
                 if self.args.fedmix:
                     client.update_average_dataset(self.average_data)
-
                 # train on new dataset
-                w = client.train(copy.deepcopy(w_global))
-                w_locals.append((client.get_sample_number(), copy.deepcopy(w)))
-
+                '''condense'''
+                if self.args.condense:
+                    w, condense_data = client.train_condense(copy.deepcopy(w_global), round_idx)
+                    w_locals.append((client.get_sample_number(), copy.deepcopy(w)))
+                    self.syn_data[client_idx] = condense_data
+                else : 
+                    w = client.train(copy.deepcopy(w_global))
+                    w_locals.append((client.get_sample_number(), copy.deepcopy(w)))
+                    
                 # Save model
                 client.model_trainer.save_model(self.save_model_dir)
+                
                 
                 # Gather average Logits for offline logits
                 # avg_logits += client.get_logits(self.unlabeled_train_data)
