@@ -153,7 +153,10 @@ def add_args(parser):
     parser.add_argument('--image_per_class', help="Condense image per class",
                        type=int, default=0)
 
-    
+    parser.add_argument('--outer_loops', help="Condensing iterations",
+                       type=int, default=10)
+
+   
     return parser
 
 

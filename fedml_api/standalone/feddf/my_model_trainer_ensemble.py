@@ -330,25 +330,22 @@ class MyModelTrainer_fedmix(ModelTrainer):
                         images_2, labels_2 = image_means[idx2], label_means[idx2]   
                         model.zero_grad()
                         images_2_ = images_2.repeat(batch_size, 1, 1, 1)
-                        
+
                         images_1.requires_grad_(True)
                         log_probs = model((1-lam) * images_1)
-                                                
                         # Get average logits from clients
                         avg_logits = self.get_logits_from_clients((1-lam) * images_1, 
                                                                   device, args)
-
-                        
-                        #jacobian = torch.autograd.grad(outputs=log_probs[:,labels_1].sum(), inputs=images_1, retain_graph=True)[0].view(batch_size,1,-1)
+                        import ipdb; ipdb.set_trace(context=15)
+                        jacobian = torch.autograd.grad(outputs=log_probs[:,labels_1].sum(), inputs=images_1, retain_graph=True)[0].view(batch_size,1,-1)
                         loss1 = (1-lam) * criterion(log_probs, avg_logits)
-                        #loss2 = (1-lam) * lam * torch.mean(torch.bmm(jacobian, images_2_.view(batch_size,-1,1)))
-#                         for i in range(args.class_num):
-#                             if labels_2[0,i] > 0:
-#                                 labels_2_ = i * torch.ones_like(avg_logits).to(device)
-#                                 loss1 = loss1 + labels_2[0,i] * lam * criterion(log_probs, labels_2_)
-#                         loss = loss1 + loss2        
+                        loss2 = (1-lam) * lam * torch.mean(torch.bmm(jacobian, images_2_.view(batch_size,-1,1)))
+                        for i in range(args.class_num):
+                            if labels_2[0,i] > 0:
+                                labels_2_ = i * torch.ones_like(avg_logits).to(device)
+                                loss1 = loss1 + labels_2[0,i] * lam * criterion(log_probs, labels_2_)
+                        loss = loss1 + loss2        
                         
-                        loss = loss1
                         loss.backward()
 
                         # to avoid nan loss

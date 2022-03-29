@@ -46,9 +46,9 @@ class Client:
         weights = self.model_trainer.get_model_params()
         return weights
     
-    def train_condense(self, w_global, round_idx):
+    def train_condense(self, w_global, round_idx, syn_data):
         self.model_trainer.set_model_params(w_global)
-        condense_data = self.model_trainer.train_condense(self.local_training_data, self.local_noaug_train_data, self.client_idx, round_idx, self.device, self.args)
+        condense_data = self.model_trainer.train_condense(self.local_training_data, self.local_noaug_train_data, self.client_idx, round_idx, syn_data, self.device, self.args)
         weights = self.model_trainer.get_model_params()
         return weights, condense_data
         

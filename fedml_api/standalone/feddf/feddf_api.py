@@ -66,7 +66,7 @@ class FeddfAPI(object):
         self.fedmix = False
         if args.fedmix or args.fedmix_server:
             self.fedmix = True
-            self.average_data = self.get_image_label_mean()
+        
         
         ## Condense
         if args.condense :
@@ -82,6 +82,7 @@ class FeddfAPI(object):
         self.model_trainer.class_num = class_num
 
         self._setup_clients(train_data_local_num_dict, train_data_local_dict, test_data_local_dict, client_model_trainer)
+        
 
 
     
@@ -97,7 +98,6 @@ class FeddfAPI(object):
         return images_means, labels_means
 
     def generate_mean(self, client_idx):
-        
         c = self.client_list[0] #  We just need the client instance, which one doesn't matter
         # Setup client
         c.update_local_dataset(client_idx, self.train_data_local_dict[client_idx],
@@ -118,13 +118,18 @@ class FeddfAPI(object):
     
     def _setup_clients(self, train_data_local_num_dict, train_data_local_dict, test_data_local_dict, model_trainer):
         logging.info("############setup_clients (START)#############")
-        for client_idx in range(self.args.client_num_per_round):
+        for client_idx in range(self.args.client_num_in_total):
             c = Client(client_idx, train_data_local_dict[client_idx], test_data_local_dict[client_idx],
                        train_data_local_num_dict[client_idx], self.args, self.device, model_trainer)
-            if self.condense:
-                c.update_local_noaug_dataset(self.train_data_local_noaug_dict[client_idx])
             
+            if self.args.condense:
+                self.syn_data[client_idx] = (None, None)
+                c.update_local_noaug_dataset(self.train_data_local_noaug_dict[client_idx])
+
             self.client_list.append(c)
+            
+        if self.fedmix:
+            self.average_data = self.get_image_label_mean()
         logging.info("############setup_clients (END)#############")
 
 
@@ -163,23 +168,24 @@ class FeddfAPI(object):
             client_indexes = self._client_sampling(round_idx, self.args.client_num_in_total,
                                                    self.args.client_num_per_round)
             logging.info("client_indexes = " + str(client_indexes))
-            for idx, client in enumerate(self.client_list):# self.client_list is not important actually..
+            
+            for idx, client_idx in enumerate(client_indexes):# self.client_list is not important actually.. -> client_indexes
                 # update dataset
-                client_idx = client_indexes[idx]
+                client = self.client_list[idx]
                 client.update_local_dataset(client_idx, self.train_data_local_dict[client_idx],
                                             self.test_data_local_dict[client_idx],
                                             self.train_data_local_num_dict[client_idx])
-                if self.condense:
-                    client.update_local_noaug_dataset(self.train_data_local_noaug_dict[client_idx])
-                
                 
                 # For fedmix
                 if self.args.fedmix:
                     client.update_average_dataset(self.average_data)
                 # train on new dataset
+                
                 '''condense'''
                 if self.args.condense:
-                    w, condense_data = client.train_condense(copy.deepcopy(w_global), round_idx)
+                    syn_data = self.syn_data[client_idx]
+                    client.update_local_noaug_dataset(self.train_data_local_noaug_dict[client_idx])
+                    w, condense_data = client.train_condense(copy.deepcopy(w_global), round_idx, syn_data)
                     w_locals.append((client.get_sample_number(), copy.deepcopy(w)))
                     self.syn_data[client_idx] = condense_data
                 else : 
