@@ -89,7 +89,6 @@ class FeddfAPI(object):
     def get_image_label_mean(self):
         
         images_means, labels_means = torch.Tensor().to(self.device), torch.Tensor().to(self.device)
-        
         for client_idx in range(self.args.client_num_in_total):
             image_mean, label_mean = self.generate_mean(client_idx)
             images_means = torch.cat([images_means, image_mean])
@@ -177,7 +176,7 @@ class FeddfAPI(object):
                                             self.train_data_local_num_dict[client_idx])
                 
                 # For fedmix
-                if self.args.fedmix:
+                if self.fedmix:
                     client.update_average_dataset(self.average_data)
                 # train on new dataset
                 

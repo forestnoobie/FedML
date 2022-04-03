@@ -373,7 +373,7 @@ class MyModelTrainer(ModelTrainer):
         model.train()
         net_parameters = list(model.parameters(c))
         
-        optimizer_img = torch.optim.SGD([image_syn, ], lr=0.1, momentum=0.5)
+        optimizer_img = torch.optim.SGD([image_syn, ], lr=0.05, momentum=0.5)
         optimizer_img.zero_grad()
         loss_avg = 0
         criterion = nn.CrossEntropyLoss().to(device)
