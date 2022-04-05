@@ -13,6 +13,7 @@ try:
     from fedml_core.trainer.model_trainer import ModelTrainer
 except ImportError:
     from FedML.fedml_core.trainer.model_trainer import ModelTrainer
+from fedml_api.utils.utils_condense import TensorDataset
 
 # Model trainer for ensemble distillation
 
@@ -313,32 +314,32 @@ class MyModelTrainer_fedmix(ModelTrainer):
         curr_val_acc = 0
         best_val_acc = 0
         
+        # For mixup
         lam = args.lam
+        avg_ds = TensorDataset(image_means, label_means)
+        avg_loader = torch.utils.data.DataLoader(avg_ds,
+                                                 batch_size=args.unlabeled_batch_size,
+                                                shuffle=True)
+
         while curr_step < args.server_steps and patience_step < args.server_patience_steps:
             batch_loss = []
+            avg_loader_iterator = iter(avg_loader)
+            
             with tqdm(train_data, unit="Step") as tstep:
                 for batch_idx, (images_1, labels_1) in enumerate(tstep):
                     tstep.set_description(f"Step {curr_step}")
 
                     if curr_step < args.server_steps and patience_step < args.server_patience_steps:
                         model.train()
+                        try : 
+                            data2 = next(avg_loader_iterator)
+                        except StopIteration:
+                            avg_loader_iterator = iter(avg_loader)
+                            data2 = next(avg_loader_iterator)
                         
-                        # with only averaged data
-  
-                        batch_size = labels_1.size()[0]
-#                         images_1, labels_1 = images_1.to(device), labels_1.to(device)
-#                         num_2 = label_means.size()[0]
-#                         idx2 = np.random.choice(range(num_2), 1, replace=False)
-#                         images_2, labels_2 = image_means[idx2], label_means[idx2]   
-#                         model.zero_grad()
-#                         images_2_ = images_2.repeat(batch_size, 1, 1, 1)
-
-#                         images_1.requires_grad_(True)
-                        num_2 = label_means.size()[0]
-                        idx2 = np.random.choice(range(num_2), batch_size, replace=False)
-                        images_2, labels_2 = image_means[idx2], label_means[idx2]                        
-                        log_probs = model(images_2)
-                        #log_probs = F.log_softmax(output, dim=1)
+                        images_2, labels_2 = data2[0], data2[1]                     
+                        output = model(images_2)
+                        log_probs = F.log_softmax(output, dim=1)
                         # Get average logits from clients
                         avg_logits = self.get_logits_from_clients(images_2, 
                                                                   device, args)
