@@ -35,10 +35,13 @@ class MyModelTrainer(ModelTrainer):
         flist = os.listdir(self.save_model_dir)
         save_paths = []
         for fname in flist:
-            selected_client = fname.split('_')[-1]
+            selected_client = fname[-1]
             if int(selected_client) in selected_client_indexes.tolist():
                 save_paths.append(os.path.join(self.save_model_dir ,fname))
-        assert len(save_paths) == len(selected_client_indexes)
+
+        # save_paths = [selected_client for selected_client in save_paths
+        #               if int(selected_client[-1]) in selected_client_indexes.tolist()]
+        # # Choose clients which are selected in this round
         data_num = image.size(0)
         model = copy.deepcopy(self.model)
         avg_logits = torch.zeros(data_num, self.class_num, device=device)
@@ -53,8 +56,7 @@ class MyModelTrainer(ModelTrainer):
                 avg_logits += model(image)
 
         avg_logits /= len(save_paths)
-        avg_logits = F.softmax(avg_logits, dim=1)
-        return avg_logits.detach()
+        return avg_logits
 
     # Online Training
     def train(self, train_data, val_data, device, args):
@@ -75,8 +77,7 @@ class MyModelTrainer(ModelTrainer):
         patience_step = 0
         curr_val_acc = 0
         best_val_acc = 0
-        
-        model.train()
+
         while curr_step < args.server_steps and patience_step < args.server_patience_steps:
             batch_loss = []
             with tqdm(train_data, unit="Step") as tstep:
@@ -84,20 +85,21 @@ class MyModelTrainer(ModelTrainer):
                     tstep.set_description(f"Step {curr_step}")
 
                     if curr_step < args.server_steps and patience_step < args.server_patience_steps:
-                        x, _ = x.to(device), labels.to(device)
-                        optimizer.zero_grad()
+                        model.train()
+                        x, labels = x.to(device), labels.to(device)
                         model.zero_grad()
                         output = model(x)
                         log_prob = F.log_softmax(output, dim=1)
-                        
+                        label_prob = F.softmax(labels, dim=1)
+
                         # Get average logits from clients
                         avg_logits = self.get_logits_from_clients(x, device, args)
 
-                        loss = criterion(log_prob, avg_logits.detach())
+                        loss = criterion(log_prob, avg_logits)
                         loss.backward()
 
                         # to avoid nan loss
-                        #torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
 
                         optimizer.step()
                         batch_loss.append(loss.item())
@@ -115,6 +117,7 @@ class MyModelTrainer(ModelTrainer):
 
                         tstep.set_postfix(val_acc=curr_val_acc, best_val_acc=best_val_acc, step_loss=loss.item())
 
+
                     else:
                         # If val_acc plateaus or reaches server_steps
                         break
@@ -125,47 +128,73 @@ class MyModelTrainer(ModelTrainer):
 
         return best_val_acc
 
-    def train_wth_condense(self, condensed_data, device, args):
-        # make dataset and dataloader
-        # train with cross entropy
-        import ipdb; ipdb.set_trace(context=15)
-        condensed_ds = TensorDataset(condensed_data[0], condensed_data[1])
-        condensed_dl = torch.utils.data.DataLoader(condensed_data, batch_size=6, shuffle=True)
+    # Offline training
+    # def train(self, train_data, val_data, device, args):
+    #
+    #     model = self.model
+    #     model.to(device)
+    #
+    #     # train and update
+    #     criterion = nn.KLDivLoss(reduction='batchmean').to(device)
+    #
+    #     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.server_lr,
+    #                                      weight_decay=args.wd, amsgrad=True)
+    #     scheduler = CosineAnnealingLR(optimizer, args.server_steps)
+    #
+    #     epoch = 0
+    #     epoch_loss = []
+    #     curr_step = 0
+    #     patience_step = 0
+    #     curr_val_acc = 0
+    #     best_val_acc = 0
+    #
+    #     while curr_step < args.server_steps and patience_step < args.server_patience_steps :
+    #         batch_loss = []
+    #         with tqdm(train_data, unit="Step") as tstep :
+    #             for batch_idx, (x, labels) in enumerate(tstep):
+    #                 tstep.set_description(f"Step {curr_step}")
+    #
+    #                 if curr_step < args.server_steps and patience_step < args.server_patience_steps :
+    #                     model.train()
+    #                     x, labels = x.to(device), labels.to(device)
+    #                     model.zero_grad()
+    #                     output = model(x)
+    #                     log_prob = F.log_softmax(output, dim=1)
+    #                     label_prob = F.softmax(labels, dim=1)
+    #                     loss = criterion(log_prob, labels)
+    #                     loss.backward()
+    #
+    #                     # to avoid nan loss
+    #                     torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+    #
+    #                     optimizer.step()
+    #                     batch_loss.append(loss.item())
+    #
+    #                     curr_step += 1
+    #                     patience_step += 1
+    #
+    #                     ## Evaluate
+    #                     if val_data :
+    #                         curr_val_acc = self.validate(val_data, device, args)
+    #                         if curr_val_acc > best_val_acc:
+    #                             best_val_acc = curr_val_acc
+    #                             patience_step = 0
+    #                     scheduler.step()
+    #
+    #                     tstep.set_postfix(val_acc=curr_val_acc, best_val_acc=best_val_acc, step_loss=loss.item())
+    #
+    #
+    #                 else :
+    #                     # If val_acc plateaus or reaches server_steps
+    #                     break
+    #
+    #             # epoch += 1
+    #             # epoch_loss.append(sum(batch_loss) / len(batch_loss))
+    #             # logging.info("Server Epoch {} Validate acc {:.3f}".format(epoch, curr_val_acc.item()))
+    #
+    #     return best_val_acc
 
-        model = self.model
-        model.to(device)
 
-        # train and update
-        criterion = nn.CrossEntropyLoss().to(device)
-
-        optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.lr)
-          
-        epoch_loss = []
-        curr_step = 0
-        patience_step = 0
-        curr_val_acc = 0
-        best_val_acc = 0
-        
-        for epoch in range(10): ## temporary epoch
-            batch_loss = []
-            for batch_idx, (x, labels) in enumerate(condensed_dl):
-                x, labels = x.to(device), labels.to(device)
-                optimizer.zero_grad()
-                model.zero_grad()
-                log_probs = model(x)
-                loss = criterion(log_probs, labels)
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
-                optimizer.step()
-                batch_loss.append(loss.detach())
-            
-            epoch_loss.append(sum(batch_loss) / len(batch_loss))
-                
-            logging.info("Server Epoch {} epoch loss  {:.3f}".format(epoch, epoch_loss.item()))
-
-        return best_val_acc
-    
-    
     def validate(self, val_data, device, args):
         model = self.model
         model.eval()
@@ -174,7 +203,6 @@ class MyModelTrainer(ModelTrainer):
 
         with torch.no_grad():
             for batch_idx, (x, labels) in enumerate(val_data):
-                
                 x, labels = x.to(device), labels.to(device)
                 output = model(x)
                 predicted = torch.argmax(output, dim=1)
@@ -261,7 +289,6 @@ class MyModelTrainer_fedmix(ModelTrainer):
                 avg_logits += model(image)
 
         avg_logits /= len(save_paths)
-        avg_logits = F.softmax(avg_logits, dim=1)
         return avg_logits
 
     # Online Training
@@ -451,8 +478,6 @@ class MyModelTrainer_fedmix_wth_unlabel(ModelTrainer):
                 avg_logits += model(image)
 
         avg_logits /= len(save_paths)
-        avg_logits = F.softmax(avg_logits, dim=1)
-
         return avg_logits
 
     # Online Training

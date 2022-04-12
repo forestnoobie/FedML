@@ -115,8 +115,8 @@ def load_cifar10_data(datadir):
 
 def partition_data(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0):
     logging.info("*********partition data***************")
-    X_train, y_train, X_test, y_test = load_cifar10_data(datadir)
-    n_train = X_train.shape[0]
+    X_train_all, y_train_all, X_test, y_test = load_cifar10_data(datadir)
+    n_train = X_train_all.shape[0]
     # n_test = X_test.shape[0]
     total_idxs = np.random.permutation(n_train)
 
@@ -128,19 +128,19 @@ def partition_data(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0):
         valid_n = int(valid_ratio * n_train)
         train_idxs = total_idxs[valid_n:]
         valid_idxs = total_idxs[:valid_n]
-        X_valid = X_train[valid_idxs]
-        y_valid = y_train[valid_idxs]
+        X_valid = X_train_all[valid_idxs]
+        y_valid = y_train_all[valid_idxs]
 
-        X_train = X_train[train_idxs]
-        y_train = y_train[train_idxs]
+        X_train = X_train_all[train_idxs]
+        y_train = y_train_all[train_idxs]
     else :
         train_idxs = total_idxs
-        X_train = X_train[train_idxs]
-        y_train = y_train[train_idxs]
+        X_train = X_train_all[train_idxs]
+        y_train = y_train_all[train_idxs]
 
     if partition == "homo":
-        # total_num = n_train
-        # idxs = np.random.permutation(total_num)
+        total_num = X_train
+        train_idxs = np.random.permutation(total_num)
         batch_idxs = np.array_split(train_idxs, n_nets)
         net_dataidx_map = {i: batch_idxs[i] for i in range(n_nets)}
 
@@ -152,6 +152,7 @@ def partition_data(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0):
         net_dataidx_map = {}
 
         while min_size < 10:
+        #while min_size < int(0.50 * N / n_nets):
             idx_batch = [[] for _ in range(n_nets)]
             # for each class in the dataset
             for k in range(K):
@@ -178,7 +179,6 @@ def partition_data(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0):
         traindata_cls_counts = read_data_distribution(distribution_file_path)
     else:
         traindata_cls_counts = record_net_data_stats(y_train, net_dataidx_map)
-
     if valid_ratio:
         return X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts, valid_idxs
 
@@ -188,30 +188,38 @@ def partition_data_equally(dataset, datadir, partition, n_nets, alpha, valid_rat
     logging.info("*********partition data equally***************")
     n_auxi_nets = 10
     assert n_auxi_nets <= n_nets
-    X_train, y_train, X_test, y_test = load_cifar10_data(datadir)
-    n_train = X_train.shape[0]
+    X_train_all, y_train_all, X_test, y_test = load_cifar10_data(datadir)
+    n_train = X_train_all.shape[0]
     # n_test = X_test.shape[0]
     total_idxs = np.random.permutation(n_train)
 
     X_valid = None
     y_valid = None
     valid_idxs = None
-
+    subset2original_idx = {}
+    original2subset_idx = {}
+    
     if valid_ratio > 0.0:
         valid_n = int(valid_ratio * n_train)
         train_idxs = total_idxs[valid_n:]
         valid_idxs = total_idxs[:valid_n]
-        X_valid = X_train[valid_idxs]
-        y_valid = y_train[valid_idxs]
+        X_valid = X_train_all[valid_idxs]
+        y_valid = y_train_all[valid_idxs]
 
-        X_train = X_train[train_idxs]
-        y_train = y_train[train_idxs]
+        X_train = X_train_all[train_idxs]
+        y_train = y_train_all[train_idxs]
+        
+        for subset_idx, original_idx in enumerate(train_idxs):
+            subset2original_idx[subset_idx] = original_idx 
+            original2subset_idx[original_idx] = subset_idx
     else :
         train_idxs = total_idxs
         X_train = X_train[train_idxs]
         y_train = y_train[train_idxs]
 
     if partition == 'homo':
+        total_num = X_train
+        train_idxs = np.random.permutation(total_num)
         batch_idxs = np.array_split(train_idxs, n_nets)
         net_dataidx_map = {i : batch_idxs[i] for i in range(n_nets)}
 
@@ -296,7 +304,13 @@ def partition_data_equally(dataset, datadir, partition, n_nets, alpha, valid_rat
 
 
     if valid_ratio :
-        return X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts, valid_idxs
+        # Change subset index to original index
+        net_dataidx_map_all = {}
+        for k,v in net_dataidx_map.items():
+            index_all = [subset2original_idx[index] for index in v]
+            net_dataidx_map_all[k] = index_all
+        
+        return X_train, y_train, X_test, y_test, net_dataidx_map_all, traindata_cls_counts, valid_idxs
 
     return X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts
 
@@ -328,13 +342,14 @@ def get_unlabeled_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None, 
     test_data_num = len(test_ds)
 
     train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=True,
-                               num_workers=num_workers, pin_memory=True)
-    test_dl = data.DataLoader(dataset=test_ds, batch_size=test_bs, shuffle=False)
+                               drop_last=False, num_workers=num_workers, pin_memory=True)
+    test_dl = data.DataLoader(dataset=test_ds, batch_size=test_bs, shuffle=False,
+                             drop_last=False)
 
     return train_data_num, test_data_num, train_dl, test_dl
 
 
-def get_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None, num_workers=2, randaug=True):
+def get_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None, num_workers=2, randaug=False):
     dl_obj = CIFAR10_truncated
 
     transform_train, transform_test = _data_transforms_cifar10()

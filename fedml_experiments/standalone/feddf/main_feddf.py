@@ -3,6 +3,7 @@ import logging
 import os
 import random
 import sys
+import copy
 
 import numpy as np
 import torch
@@ -98,7 +99,7 @@ def add_args(parser):
     parser.add_argument('--seed', type=int, default=0,
                         help="Seed")
 
-    parser.add_argument('--split_equally', help='Split equally?',
+    parser.add_argument('--split_unequally', help='Split unequally?', default=False,
                         action='store_true')
 
     # For Multi augmentation
@@ -152,10 +153,21 @@ def add_args(parser):
     
     parser.add_argument('--image_per_class', help="Condense image per class",
                        type=int, default=0)
+    
+    parser.add_argument('--image_lr', type=float, default=0.1, help="lambda fixed")
 
     parser.add_argument('--outer_loops', help="Condensing iterations",
                        type=int, default=10)
-
+    
+    parser.add_argument('--train_condense_server', help='train server with condense server',
+                        action='store_true')
+    
+    # Hard Sampling
+    parser.add_argument('--hard_sample', type=str, default='', metavar='LR',
+                        help='Type of hard sampling method')
+    
+    parser.add_argument('--hard_sample_ratio', type=float, default=0.0, metavar='LR',
+                        help='Ratio of hard sample')
    
     return parser
 
@@ -422,13 +434,13 @@ def custom_model_trainer(args, model, ensemble=None, logit_type='average'):
 
 if __name__ == "__main__":
 
-    parser = add_args(argparse.ArgumentParser(description='FedAvg-standalone'))
+    parser = add_args(argparse.ArgumentParser(description='FedDF'))
     args = parser.parse_args()
 
     wandb.init(
-        project="fedml-df",
-        name="FedDF-r" + str(args.comm_round) + "-e" + str(args.epochs) + "-lr" + str(args.lr) +
-             "-alpha" + str(args.partition_alpha) + "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix), 
+        project="fedml-df-0413",
+        name="FedDF" +
+             "-alpha" + str(args.partition_alpha) + "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-ssteps_" + str(args.server_steps), 
         config=args
     )
 
@@ -451,6 +463,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = True
 
     # load data and unlabeled data
+    args.split_equally = not args.split_unequally
     dataset = load_data(args, args.dataset)
     unlabeled_dataset = load_unlabeled_data(args, args.unlabeled_dataset)
 
@@ -459,7 +472,7 @@ if __name__ == "__main__":
     # In this case, please use our FedML distributed version (./fedml_experiments/distributed_fedavg)
     model = create_model(args, model_name=args.model, output_dim=dataset[7])
     server_model_trainer = custom_model_trainer(args, model, ensemble=True, logit_type=args.logit_type)
-    client_model_trainer = custom_model_trainer(args, model)
+    client_model_trainer = custom_model_trainer(args, copy.deepcopy(model))
     model_trainer = [server_model_trainer, client_model_trainer]
     
     logging.info(model)

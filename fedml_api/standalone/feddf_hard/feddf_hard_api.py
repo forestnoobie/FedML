@@ -4,7 +4,7 @@ import random
 import os
 from _collections import defaultdict
 
-import numpy as nps
+import numpy as np
 import torch
 import wandb
 from torch.nn import functional as F
@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader, Dataset, Subset
 from fedml_api.standalone.feddf.client import Client
 
 
-class FeddfAPI(object):
+class Feddf_hardAPI(object):
     def __init__(self, dataset, unlabeled_dataset, device, args, model_trainer):
         self.device = device
         self.args = args
@@ -153,7 +153,7 @@ class FeddfAPI(object):
         logging.info(past_stats)
 
     def train(self):
-        w_global = copy.deepcopy(self.model_trainer.get_model_params())
+        w_global = self.model_trainer.get_model_params()
         for round_idx in range(self.args.comm_round):
             logging.info("################Communication round : {}".format(round_idx))
 
@@ -170,7 +170,7 @@ class FeddfAPI(object):
             
             for idx, client_idx in enumerate(client_indexes):# self.client_list is not important actually.. -> client_indexes
                 # update dataset
-                client = self.client_list[client_idx]
+                client = self.client_list[idx]
                 client.update_local_dataset(client_idx, self.train_data_local_dict[client_idx],
                                             self.test_data_local_dict[client_idx],
                                             self.train_data_local_num_dict[client_idx])
@@ -178,52 +178,46 @@ class FeddfAPI(object):
                 # For fedmix
                 if self.fedmix:
                     client.update_average_dataset(self.average_data)
+                # train on new dataset
                 
                 '''condense'''
                 if self.args.condense:
-                    syn_data = copy.deepcopy(self.syn_data[client_idx])
+                    syn_data = self.syn_data[client_idx]
                     client.update_local_noaug_dataset(self.train_data_local_noaug_dict[client_idx])
                     w, condense_data = client.train_condense(copy.deepcopy(w_global), round_idx, syn_data)
                     w_locals.append((client.get_sample_number(), copy.deepcopy(w)))
-                    self.syn_data[client_idx] = copy.deepcopy(condense_data)
-                    
+                    self.syn_data[client_idx] = condense_data
                 else : 
                     w = client.train(copy.deepcopy(w_global))
                     w_locals.append((client.get_sample_number(), copy.deepcopy(w)))
-                # Client test
-                if round_idx % self.args.frequency_of_the_test == 0:
-                    self._global_test_on_client(client, round_idx)
-                
-                
+                    
                 # Save model
                 client.model_trainer.save_model(self.save_model_dir)
                 
                 
                 # Gather average Logits for offline logits
                 # avg_logits += client.get_logits(self.unlabeled_train_data)
+
             # Initialize model fusion with aggregated w_global
             w_global = self._aggregate(w_locals)
             self.model_trainer.set_model_params(w_global)
 
             # update global weights with average logits
             avg_logits /= len(self.client_list)
+            ''' hard sample mining '''
             self._ensemble_distillation(round_idx, avg_logits)
-            '''training server with condensed data'''
-            if self.args.train_condense_server:
-                self._train_condense_server(round_idx, client_indexes)
             w_global = self.model_trainer.get_model_params()
 
             # test results
             # at last round
-
             if round_idx == self.args.comm_round - 1:
-                self._global_test_on_server(round_idx)
+                self._local_test_on_all_clients(round_idx)
             # per {frequency_of_the_test} round
             elif round_idx % self.args.frequency_of_the_test == 0:
                 if self.args.dataset.startswith("stackoverflow"):
                     self._local_test_on_validation_set(round_idx)
                 else:
-                    self._global_test_on_server(round_idx)
+                    self._local_test_on_all_clients(round_idx)
 
     def _client_sampling(self, round_idx, client_num_in_total, client_num_per_round):
         if client_num_in_total == client_num_per_round:
@@ -261,13 +255,7 @@ class FeddfAPI(object):
     #     subset = torch.utils.data.Subset(self.test_global.dataset, sample_indices)
     #     sample_testset = torch.utils.data.DataLoader(subset, batch_size=self.args.batch_size)
     #     self.val_global = sample_testset
-    
-    def _train_condense_server(self, round_idx, client_indexes):
-        syn_data = [self.syn_data[c][0] for c in client_indexes]
-        syn_label = [self.syn_data[c][1] for c in client_indexes]
-        selected_syn_data = (syn_data, syn_label)
-        self.model_trainer.train_wth_condense(selected_syn_data, self.device, self.args)
-    
+        
     def _ensemble_distillation(self, round_idx, avg_logits):
 
         stats = {
@@ -303,46 +291,20 @@ class FeddfAPI(object):
                                              pin_memory=True)
             
             
-        
+            
+            
         if self.args.fedmix_server:
             round_server_val_acc = self.model_trainer.train(unlabeled_dataloader, self.average_data, self.val_global, self.device, self.args)
         else : 
             round_server_val_acc = self.model_trainer.train(unlabeled_dataloader, self.val_global, self.device, self.args)
-               
-        wandb.log({"Server/val/Acc": round_server_val_acc, "round": round_idx}, step=round_idx)
+
+        wandb.log({"Server/val/Acc": round_server_val_acc, "round": round_idx})
         stats['server_val_acc'] = round_server_val_acc
         logging.info(stats)
 
-    def _global_test_on_server(self, round_idx):
-        logging.info("################global_test_on_server : {}".format(round_idx))
-        server_metrics = self.model_trainer.test(self.test_global, self.device, self.args)
-        # test on test dataset
-        test_acc = server_metrics['test_correct'] / server_metrics['test_total']
-        test_loss = server_metrics['test_loss'] / server_metrics['test_total']
 
-        stats = {'test_acc': test_acc, 'test_loss': test_loss, 'round_idx': round_idx}
-        wandb.log({"Server Test/Acc": test_acc, "round": round_idx}, step=round_idx)
-        wandb.log({"Server Test/Loss": test_loss, "round": round_idx}, step=round_idx)
-        logging.info(stats)
-        self._update_stats(stats)
-        
-    def _global_test_on_client(self, client, round_idx):
-        logging.info("################global_test_on_client : {} round : {}".format(client.client_idx ,round_idx))
-        client_metrics = client.local_test(True)
-        
-        # test on test dataset
-        test_acc = client_metrics['test_correct'] / client_metrics['test_total']
-        test_loss = client_metrics['test_loss'] / client_metrics['test_total']
-
-        stats = {'Client {} test_acc'.format(client.client_idx): test_acc, 'Client {} test_loss'.format(client.client_idx): test_loss, 'round_idx': round_idx}
-        wandb.log({"Client {}  Test/Acc".format(client.client_idx): test_acc, "round": round_idx}, step=round_idx)
-        wandb.log({"Client {} Test/Loss".format(client.client_idx): test_loss, "round": round_idx}, step=round_idx)
-        #logging.info(stats)
-        self._update_stats(stats)
-        
-    
     def _local_test_on_all_clients(self, round_idx):
-        '''Currently we are not storing local weights so its not used for the moment'''
+
         logging.info("################local_test_on_all_clients : {}".format(round_idx))
 
         train_metrics = {
@@ -380,7 +342,6 @@ class FeddfAPI(object):
             test_metrics['num_samples'].append(copy.deepcopy(test_local_metrics['test_total']))
             test_metrics['num_correct'].append(copy.deepcopy(test_local_metrics['test_correct']))
             test_metrics['losses'].append(copy.deepcopy(test_local_metrics['test_loss']))
-            
 
             """
             Note: CI environment is CPU-based computing. 
@@ -398,14 +359,14 @@ class FeddfAPI(object):
         test_loss = sum(test_metrics['losses']) / sum(test_metrics['num_samples'])
 
         stats = {'training_acc': train_acc, 'training_loss': train_loss}
-        wandb.log({"Train/Acc": train_acc, "round": round_idx}, step=round_idx)
-        wandb.log({"Train/Loss": train_loss, "round": round_idx}, step=round_idx)
+        wandb.log({"Train/Acc": train_acc, "round": round_idx})
+        wandb.log({"Train/Loss": train_loss, "round": round_idx})
         logging.info(stats)
         self._update_stats(stats)
 
         stats = {'test_acc': test_acc, 'test_loss': test_loss}
-        wandb.log({"Test/Acc": test_acc, "round": round_idx}, step=round_idx)
-        wandb.log({"Test/Loss": test_loss, "round": round_idx}, step=round_idx)
+        wandb.log({"Test/Acc": test_acc, "round": round_idx})
+        wandb.log({"Test/Loss": test_loss, "round": round_idx})
         logging.info(stats)
         self._update_stats(stats)
 

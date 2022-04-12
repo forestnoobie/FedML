@@ -1,13 +1,14 @@
 import logging
 import os
 import copy
+from _collections import defaultdict
 
 import torch
 from torch import nn
 from torchvision.utils import save_image
 import numpy as np
 
-from fedml_api.utils.utils_condense import match_loss
+from fedml_api.utils.utils_condense import match_loss, TensorDataset
 
 try:
     from fedml_core.trainer.model_trainer import ModelTrainer
@@ -26,10 +27,11 @@ class MyModelTrainer(ModelTrainer):
 
     def save_model(self, save_dir, model_type='client'):
         model = self.model
-        model_file_name = model_type + '_' + str(self.id)
+        model_file_name = model_type + '_%04d'%(int(self.id))
         save_path = os.path.join(save_dir, model_file_name)
         torch.save(model.cpu().state_dict(), save_path)
 
+        
     def train(self, train_data, device, args):
         model = self.model
 
@@ -45,26 +47,31 @@ class MyModelTrainer(ModelTrainer):
                                          weight_decay=args.wd, amsgrad=True)
 
         epoch_loss = []
+        total_num = 0
         for epoch in range(args.epochs):
             batch_loss = []
+            batch_correct = []
             for batch_idx, (x, labels) in enumerate(train_data):
                 x, labels = x.to(device), labels.to(device)
                 model.zero_grad()
+                optimizer.zero_grad()
                 log_probs = model(x)
                 loss = criterion(log_probs, labels)
                 loss.backward()
-
-                # to avoid nan loss
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
-
                 optimizer.step()
-                # logging.info('Update Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                #     epoch, (batch_idx + 1) * args.batch_size, len(train_data) * args.batch_size,
-                #            100. * (batch_idx + 1) / len(train_data), loss.item()))
+                
+                _, predicted = torch.max(log_probs, -1)
+                correct = predicted.eq(labels).sum()
+                
+                total_num += labels.size()[0]
+                batch_correct.append(correct.cpu().item())
                 batch_loss.append(loss.item())
+
+        
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
-            logging.info('Client Index = {}\tEpoch: {}\tLoss: {:.6f}'.format(
-                self.id, epoch, sum(epoch_loss) / len(epoch_loss)))
+            logging.info('Client Index = {}\tEpoch: {}\tLoss: {:.6f} \tTrain acc : {:.6f}'.format(
+                self.id, epoch, sum(epoch_loss) / len(epoch_loss), sum(batch_correct) /total_num))
+        
 
     def test(self, test_data, device, args):
         model = self.model
@@ -111,11 +118,7 @@ class MyModelTrainer(ModelTrainer):
     
     def train_condense(self, train_data, train_data_no_aug, client_idx, round_idx, syn_data,
                        device, args):
-        ### To Do
-        # function : get_images, criterion
-        # parameters : num_classes, batch_real, image_syn, ipc(image per class), channel, im_size, net_parameters
-        # parameters : optimizer_img
-        # args to add : args.lr_img
+                
         num_classes = args.class_num
         batch_real = args.batch_size
         ipc = args.image_per_class
@@ -141,13 +144,14 @@ class MyModelTrainer(ModelTrainer):
             batch_loss = []
             for batch_idx, (x, labels) in enumerate(train_data):
                 x, labels = x.to(device), labels.to(device)
+                optimizer.zero_grad()
                 model.zero_grad()
                 log_probs = model(x)
                 loss = criterion(log_probs, labels)
                 loss.backward()
 
                 # to avoid nan loss
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                #torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
 
                 optimizer.step()
                 batch_loss.append(loss.item())
@@ -194,13 +198,14 @@ class MyModelTrainer(ModelTrainer):
         else :
             image_syn = image_syn.to(device)
             label_syn = label_syn.to(device)
+            image_syn.requires_grad_(True)
         
         
         '''training synthetic data'''
         model.train()
         net_parameters = list(model.parameters(c))
         
-        optimizer_img = torch.optim.SGD([image_syn, ], lr=0.1, momentum=0.5)
+        optimizer_img = torch.optim.SGD([image_syn, ], lr=args.image_lr, momentum=0.5)
         optimizer_img.zero_grad()
         loss_avg = 0
         criterion = nn.CrossEntropyLoss().to(device)
@@ -255,14 +260,11 @@ class MyModelTrainer(ModelTrainer):
             loss_avg += loss.item()
             loss_log =  loss.detach().cpu().item()
             
-            if ol % 1000 == 0 :
-                logging.info('Outer loop idx : {}, loss {:.6f}'.format(ol, loss_log))
-            
-            
-            if ol % 10000 == 0:
+            if ol % 100 == 0 or ol == outer_loops -1 :
+                logging.info('Outer loop idx : {}, loss {:.6f}'.format(ol, loss_log))            
                 save_dir = os.path.join(args.wandb_save_dir, "./condense")
                 save_name = os.path.join(save_dir, 
-                                         'vis_ipc{}_ol{}_c{}.png'.format(str(ipc), str(ol), str(client_idx)))
+                                         'vis_ipc{}_ol{}_c{}_r{}.png'.format(str(ipc), str(ol), str(client_idx), str(round_idx)))
 
                 image_syn_vis = copy.deepcopy(image_syn.detach().cpu())
                 for ch in range(channel):
@@ -280,8 +282,8 @@ class MyModelTrainer(ModelTrainer):
         
         logging.info('Condensing Complete')
         
-        '''save wrt round'''
-#         if round_idx % 10 == 0:
+#         '''save wrt round'''
+#         if round_idx % 10 == 0 or round_idx == args.comm_round -1:
 #             save_dir = os.path.join(args.wandb_save_dir, "./condense")
 #             save_name = os.path.join(save_dir, 
 #                                      'vis_ipc{}_r{}_c{}.png'.format(str(ipc), str(round_idx), str(client_idx)))
@@ -326,13 +328,14 @@ class MyModelTrainer(ModelTrainer):
             batch_loss = []
             for batch_idx, (x, labels) in enumerate(train_data):
                 x, labels = x.to(device), labels.to(device)
+                optimizer.zero_grad()
                 model.zero_grad()
                 log_probs = model(x)
                 loss = criterion(log_probs, labels)
                 loss.backward()
 
                 # to avoid nan loss
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                #torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
 
                 optimizer.step()
                 batch_loss.append(loss.item())

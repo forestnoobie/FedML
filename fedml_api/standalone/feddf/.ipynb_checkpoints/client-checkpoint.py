@@ -58,7 +58,6 @@ class Client:
         self.model_trainer.set_model_params(w_global)
         self.syn_data = self.model_trainer.condense_syndata(self.local_noaug_train_data, 
                                                            self.syn_data, self.device, self.args)
-        pass
     
 
     def local_test(self, b_use_test_dataset):

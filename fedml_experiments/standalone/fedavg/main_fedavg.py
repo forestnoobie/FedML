@@ -297,7 +297,7 @@ if __name__ == "__main__":
 
     wandb.init(
         project="fedml",
-        name="FedAVG-r-" + str(args.comm_round) + "-e" + str(args.epochs) + "-lr" + str(args.lr) 
+        name="FedAVG_debug-r-" + str(args.comm_round) + "-e" + str(args.epochs) + "-lr" + str(args.lr) 
              + '-' + str(args.dataset) + '-' + str(args.model) + "-alp" + str(args.partition_alpha),
         config=args
     )
