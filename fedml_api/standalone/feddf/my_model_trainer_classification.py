@@ -47,10 +47,11 @@ class MyModelTrainer(ModelTrainer):
                                          weight_decay=args.wd, amsgrad=True)
 
         epoch_loss = []
-        total_num = 0
         for epoch in range(args.epochs):
             batch_loss = []
             batch_correct = []
+            total_num = 0
+
             for batch_idx, (x, labels) in enumerate(train_data):
                 x, labels = x.to(device), labels.to(device)
                 model.zero_grad()

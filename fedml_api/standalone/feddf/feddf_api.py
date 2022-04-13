@@ -212,7 +212,7 @@ class FeddfAPI(object):
             if self.args.train_condense_server:
                 self._train_condense_server(round_idx, client_indexes)
             w_global = self.model_trainer.get_model_params()
-
+            import ipdb; ipdb.set_trace(context=15)
             # test results
             # at last round
 

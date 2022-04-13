@@ -307,7 +307,7 @@ def get_dataloader(dataset, datadir, train_bs, test_bs, dataidxs=None):
 def get_dataloader_test(dataset, datadir, train_bs, test_bs, dataidxs_train, dataidxs_test):
     return get_dataloader_test_CIFAR100(datadir, train_bs, test_bs, dataidxs_train, dataidxs_test)
 
-def get_unlabeled_dataloader_CIFAR100(datadir, train_bs, test_bs, dataidxs=None, num_workers=2, randaug=False):
+def get_unlabeled_dataloader_CIFAR100(datadir, train_bs, test_bs, dataidxs=None, num_workers=0, randaug=False):
     
     # For ensemble distillation return num of train and test
     
