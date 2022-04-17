@@ -61,6 +61,7 @@ class MyModelTrainer(ModelTrainer):
 
         model = self.model
         model.to(device)
+        model.train()
 
         # train and update
         criterion = nn.KLDivLoss(reduction='batchmean').to(device)
@@ -76,7 +77,6 @@ class MyModelTrainer(ModelTrainer):
         curr_val_acc = 0
         best_val_acc = 0
         
-        model.train()
         while curr_step < args.server_steps and patience_step < args.server_patience_steps:
             batch_loss = []
             with tqdm(train_data, unit="Step") as tstep:
@@ -87,17 +87,14 @@ class MyModelTrainer(ModelTrainer):
                         x, _ = x.to(device), labels.to(device)
                         optimizer.zero_grad()
                         model.zero_grad()
-                        output = model(x)
-                        log_prob = F.log_softmax(output, dim=1)
+                        log_prob = model(x)
+                        log_prob = F.log_softmax(log_prob, dim=1)
                         
                         # Get average logits from clients
                         avg_logits = self.get_logits_from_clients(x, device, args)
 
                         loss = criterion(log_prob, avg_logits.detach())
                         loss.backward()
-
-                        # to avoid nan loss
-                        #torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
 
                         optimizer.step()
                         batch_loss.append(loss.item())
@@ -118,27 +115,87 @@ class MyModelTrainer(ModelTrainer):
                     else:
                         # If val_acc plateaus or reaches server_steps
                         break
-
-                # epoch += 1
-                # epoch_loss.append(sum(batch_loss) / len(batch_loss))
-                # logging.info("Server Epoch {} Validate acc {:.3f}".format(epoch, curr_val_acc.item()))
-
+                        
         return best_val_acc
-
-    def train_wth_condense(self, condensed_data, device, args):
+    
+    def train_wth_condense_soft(self, condensed_data, val_data, device, args):
         # make dataset and dataloader
         # train with cross entropy
-        import ipdb; ipdb.set_trace(context=15)
         condensed_ds = TensorDataset(condensed_data[0], condensed_data[1])
-        condensed_dl = torch.utils.data.DataLoader(condensed_data, batch_size=6, shuffle=True)
+        condensed_dl = torch.utils.data.DataLoader(condensed_ds, batch_size=6, shuffle=True)
 
         model = self.model
         model.to(device)
+        model.train()
+        
+        # train and update
+        criterion = nn.KLDivLoss(reduction='batchmean').to(device)
 
+        optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.condense_lr)
+          
+        epoch_loss = []
+        curr_step = 0
+        patience_step = 0
+        curr_val_acc = 0
+        best_val_acc = 0
+
+        while curr_step < args.condense_server_steps and \
+        patience_step < args.condense_patience_steps:
+            batch_loss = []
+            with tqdm(condensed_dl) as tstep:
+                for batch_idx, (x, labels) in enumerate(tstep):
+                    tstep.set_description(f"Step {curr_step}")
+                    
+                    if curr_step < args.condense_server_steps and \
+                    patience_step < args.server_patience_steps:
+                        x, _ = x.to(device), labels.to(device)
+                        optimizer.zero_grad()
+                        model.zero_grad()
+                        log_prob = model(x)
+                        log_prob = F.log_softmax(log_prob, dim=1)
+
+                        # Get average logits from clients
+                        avg_logits = self.get_logits_from_clients(x, device, args)
+                        
+                        loss = criterion(log_prob, avg_logits.detach())
+                        loss.backward()
+                        optimizer.step()
+                        batch_loss.append(loss.detach().clone().item())
+                        curr_step += 1
+                        patience_step += 1
+
+                        ## Evaluate
+                        if val_data:
+                            curr_val_acc = self.validate(val_data, device, args)
+                            if curr_val_acc > best_val_acc:
+                                best_val_acc = curr_val_acc
+                                patience_step = 0
+                        
+                        tstep.set_postfix(val_acc=curr_val_acc,
+                                          best_val_acc=best_val_acc, 
+                                          step_loss=loss.item())
+                    else :
+                        break
+                
+                logging.info("Epoch loss : {}".format(sum(batch_loss) / len(batch_loss)))
+
+
+        return best_val_acc
+    
+    def train_wth_condense(self, condensed_data, val_data, device, args):
+        # make dataset and dataloader
+        # train with cross entropy
+        condensed_ds = TensorDataset(condensed_data[0], condensed_data[1])
+        condensed_dl = torch.utils.data.DataLoader(condensed_ds, batch_size=16, shuffle=True)
+
+        model = self.model
+        model.to(device)
+        model.train()
+        
         # train and update
         criterion = nn.CrossEntropyLoss().to(device)
 
-        optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.lr)
+        optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.condense_lr)
           
         epoch_loss = []
         curr_step = 0
@@ -146,22 +203,40 @@ class MyModelTrainer(ModelTrainer):
         curr_val_acc = 0
         best_val_acc = 0
         
-        for epoch in range(10): ## temporary epoch
-            batch_loss = []
-            for batch_idx, (x, labels) in enumerate(condensed_dl):
-                x, labels = x.to(device), labels.to(device)
-                optimizer.zero_grad()
-                model.zero_grad()
-                log_probs = model(x)
-                loss = criterion(log_probs, labels)
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
-                optimizer.step()
-                batch_loss.append(loss.detach())
-            
-            epoch_loss.append(sum(batch_loss) / len(batch_loss))
-                
-            logging.info("Server Epoch {} epoch loss  {:.3f}".format(epoch, epoch_loss.item()))
+        while curr_step < args.condense_server_steps and \
+        patience_step < args.condense_patience_steps:
+            with tqdm(condensed_dl) as tstep:
+                batch_loss = []
+                for batch_idx, (x, labels) in enumerate(tstep):
+                    tstep.set_description(f"Step {curr_step}")
+                    
+                    if curr_step < args.condense_server_steps and \
+                    patience_step < args.server_patience_steps:
+                        x, labels = x.to(device), labels.to(device)
+                        optimizer.zero_grad()
+                        model.zero_grad()
+                        log_probs = model(x)
+                        loss = criterion(log_probs, labels)
+                        loss.backward()
+                        optimizer.step()
+                        batch_loss.append(loss.detach().clone().item())
+                        curr_step += 1
+                        patience_step += 1
+
+                        ## Evaluate
+                        if val_data:
+                            curr_val_acc = self.validate(val_data, device, args)
+                            if curr_val_acc > best_val_acc:
+                                best_val_acc = curr_val_acc
+                                patience_step = 0
+                        
+                        tstep.set_postfix(val_acc=curr_val_acc, bset_val_acc=best_val_acc, step_loss=loss.item())
+                    
+                    else :
+                        break
+                    
+                logging.info("Epoch loss : {}".format(sum(batch_loss) / len(batch_loss)))
+
 
         return best_val_acc
     
@@ -272,6 +347,7 @@ class MyModelTrainer_fedmix(ModelTrainer):
         
         model = self.model
         model.to(device)
+        model.train()
         
         # train and update
         criterion = nn.KLDivLoss(reduction='batchmean').to(device)
@@ -463,6 +539,7 @@ class MyModelTrainer_fedmix_wth_unlabel(ModelTrainer):
         
         model = self.model
         model.to(device)
+        model.train()
         
         # train and update
         criterion = nn.KLDivLoss(reduction='batchmean').to(device)
@@ -485,9 +562,7 @@ class MyModelTrainer_fedmix_wth_unlabel(ModelTrainer):
                 for batch_idx, (images_1, labels_1) in enumerate(tstep):
                     tstep.set_description(f"Step {curr_step}")
 
-                    if curr_step < args.server_steps and patience_step < args.server_patience_steps:
-                        model.train()
-                        
+                    if curr_step < args.server_steps and patience_step < args.server_patience_steps:                        
                         # with only averaged data
   
                         batch_size = labels_1.size()[0]
@@ -652,7 +727,7 @@ class MyModelTrainer_full_logits(ModelTrainer):
 
         model = self.model
         model.to(device)
-
+        
         # train and update
         criterion = nn.KLDivLoss(reduction='batchmean').to(device)
 

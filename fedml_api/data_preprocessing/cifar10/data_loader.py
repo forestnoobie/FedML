@@ -187,7 +187,6 @@ def partition_data(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0):
 def partition_data_equally(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0):
     logging.info("*********partition data equally***************")
     n_auxi_nets = 10
-    assert n_auxi_nets <= n_nets
     X_train_all, y_train_all, X_test, y_test = load_cifar10_data(datadir)
     n_train = X_train_all.shape[0]
     # n_test = X_test.shape[0]
@@ -218,12 +217,13 @@ def partition_data_equally(dataset, datadir, partition, n_nets, alpha, valid_rat
         y_train = y_train[train_idxs]
 
     if partition == 'homo':
-        total_num = X_train
+        total_num = X_train.shape[0]
         train_idxs = np.random.permutation(total_num)
         batch_idxs = np.array_split(train_idxs, n_nets)
         net_dataidx_map = {i : batch_idxs[i] for i in range(n_nets)}
 
     elif partition == 'hetero':
+        assert n_auxi_nets <= n_nets
         # Divide indicies to smaller groups
 
         K = 10 ### Number of class  !

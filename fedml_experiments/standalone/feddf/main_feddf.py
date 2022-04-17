@@ -55,7 +55,7 @@ def add_args(parser):
     parser.add_argument('--dataset', type=str, default='cifar10', metavar='N',
                         help='dataset used for training')
 
-    parser.add_argument('--data_dir', type=str, default='./../../../data/',
+    parser.add_argument('--data_dir', type=str, default='/home/osilab7/hdd/cifar',
                         help='data directory')
 
     parser.add_argument('--partition_method', type=str, default='hetero', metavar='N',
@@ -101,6 +101,10 @@ def add_args(parser):
 
     parser.add_argument('--split_unequally', help='Split unequally?', default=False,
                         action='store_true')
+    
+    # WANDB
+    parser.add_argument('--pname', type=str, default='', metavar='N',
+                        help='Project name for wandb ;con;hard')
 
     # For Multi augmentation
 
@@ -159,8 +163,26 @@ def add_args(parser):
     parser.add_argument('--outer_loops', help="Condensing iterations",
                        type=int, default=10)
     
+    # Condense training
+    
     parser.add_argument('--train_condense_server', help='train server with condense server',
                         action='store_true')
+    
+    parser.add_argument('--condense_server_steps', type=int, default=100, metavar='EP',
+                        help='how many steps will be trained with condensed data in the server')
+    
+    parser.add_argument('--condense_patience_steps', type=int, default=100, metavar='EP',
+                        help='how many patience steps will be trained with condensed data in the server')
+    
+    parser.add_argument('--condense_lr', type=float, default=0.001, 
+                        help="lr condense training ")
+    
+    parser.add_argument('--condense_train_type', type=str, default='soft', metavar='N',
+                        help='type of training method for condense training')
+
+    parser.add_argument('--con_rand', help='train server with condense server',
+                        action='store_true')
+
     
     # Hard Sampling
     parser.add_argument('--hard_sample', type=str, default='', metavar='LR',
@@ -353,7 +375,7 @@ def load_unlabeled_data(args, dataset_name):
         train_data_num, test_data_num, train_dl, test_dl = get_unlabeled_dataloader_SVHN(args.unlabeled_data_dir,
                                                                                              args.unlabeled_batch_size,
                                                                                              args.unlabeled_batch_size,
-                                                                                         randaug=args.unlabled_randaug)
+                                                                                         randaug=args.unlabeled_randaug)
 
     else :
         raise ValueError("{} not defined".format(dataset_name))
@@ -431,21 +453,46 @@ def custom_model_trainer(args, model, ensemble=None, logit_type='average'):
         return MyModelTrainerCLS(model)
 
 
+def get_proj_name(pname):
+    if pname == "con":
+        display_name = "FedCon" + \
+             "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
+        "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
+    "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + \
+       "-unlabel" + str(args.unlabeled_dataset) + "-fed   
+        project_name = "fedcon"
+        
+    elif pname == "hard":
+        display_name = "Feddf-Hard" + \
+         "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
+    "-hardtype" + str(args.hard_sample) + "-hardratio" + str(args.hard_sample_ratio) + \
+   "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix)
+        project_name = "fedml-df-hard"
+
+    else :
+        raise ValueError("Project name not defined")
+        
+    return display_name, project_name
 
 if __name__ == "__main__":
 
     parser = add_args(argparse.ArgumentParser(description='FedDF'))
     args = parser.parse_args()
-
+    dislplay_name, project_name = get_proj_name(args.pname):
+    save_dir = os.path.join("./logs", display_name)
+    os.makedirs(save_dir, exist_ok=True)
+        
     wandb.init(
-        project="fedml-df-0413",
-        name="FedDF" +
-             "-alpha" + str(args.partition_alpha) + "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-ssteps_" + str(args.server_steps), 
-        config=args
+        project=project_name,
+        name=display_name, 
+        config=args,
+        dir=save_dir
     )
+    
 
+    
     # Set Logger
-    wandb_save_dir = '/'.join(wandb.run.dir.split('/')[-3:])
+    wandb_save_dir = wandb.run.dir
     set_logger(os.path.join(wandb_save_dir, 'log.log'))
     args.wandb_save_dir = wandb_save_dir
     logging.info(args)

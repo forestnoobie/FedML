@@ -245,7 +245,11 @@ class MyModelTrainer(ModelTrainer):
                 gw_real = torch.autograd.grad(loss_real, net_parameters)
                 gw_real = list((_.detach().clone() for _ in gw_real))
                 
-                img_syn = image_syn[c*ipc: (c+1)*ipc].reshape((ipc, channel, im_size[0], im_size[1]))
+                random_class = np.random.randint(10)
+                if args.con_rand:
+                    img_syn = image_syn[random_class*ipc: (random_class+1)*ipc].reshape((ipc, channel, im_size[0], im_size[1]))
+                else :
+                    img_syn = image_syn[c*ipc: (c+1)*ipc].reshape((ipc, channel, im_size[0], im_size[1]))
                 lab_syn = torch.ones((ipc, ), device=device, dtype=torch.long) * c                
                 output_syn = model(img_syn)
                 loss_syn = criterion(output_syn, lab_syn)

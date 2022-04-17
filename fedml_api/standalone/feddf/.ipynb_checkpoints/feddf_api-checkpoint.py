@@ -67,6 +67,32 @@ class FeddfAPI(object):
         if args.fedmix or args.fedmix_server:
             self.fedmix = True
         
+        ## Hard sample mining
+        if self.args.hard_sample :
+            # Pick idx of dataset
+            # 1. random 
+            # 2. loss
+            # 3. gradient?
+            # 4. KL?
+            hardsample_ratio = self.args.hard_sample_ratio
+            unlabeled_dataset = unlabeled_train_dl.dataset
+            total_data_num = len(unlabeled_train_dl.dataset)
+            indicies = list(range(total_data_num))
+            split = int(np.floor(total_data_num * hardsample_ratio))
+            np.random.seed(0)
+            np.random.shuffle(indicies)
+            
+            hardsample_idx = indicies[:split]
+            hard_dataset = Subset(unlabeled_dataset, hardsample_idx)
+            
+            unlabeled_dataloader = DataLoader(hard_dataset,
+                                              batch_size=self.args.unlabeled_batch_size,
+                                             num_workers=2,
+                                             shuffle=True,
+                                             pin_memory=True)
+            
+            self.hard_sample_loader = copy.deepcopy(unlabeled_dataloader)
+                
         
         ## Condense
         if args.condense :
@@ -207,15 +233,23 @@ class FeddfAPI(object):
 
             # update global weights with average logits
             avg_logits /= len(self.client_list)
-            self._ensemble_distillation(round_idx, avg_logits)
-            '''training server with condensed data'''
+            
+            '''FedDF'''
+            if self.args.server_steps :
+                if round_idx % self.args.frequency_of_the_test == 0:
+                    self._global_test_on_server(round_idx, "ens")
+                self._ensemble_distillation(round_idx, avg_logits)
+            
+            '''training server with condensed data''' 
             if self.args.train_condense_server:
+                if round_idx % self.args.frequency_of_the_test == 0:
+                    self._global_test_on_server(round_idx, "con")          
                 self._train_condense_server(round_idx, client_indexes)
+                
             w_global = self.model_trainer.get_model_params()
-
+            
             # test results
             # at last round
-
             if round_idx == self.args.comm_round - 1:
                 self._global_test_on_server(round_idx)
             # per {frequency_of_the_test} round
@@ -254,19 +288,21 @@ class FeddfAPI(object):
                     averaged_params[k] += local_model_params[k] * w
         return averaged_params
 
-
-    # def _generate_validation_set(self, num_samples=10000):
-    #     test_data_num = len(self.test_global.dataset)
-    #     sample_indices = random.sample(range(test_data_num), min(num_samples, test_data_num))
-    #     subset = torch.utils.data.Subset(self.test_global.dataset, sample_indices)
-    #     sample_testset = torch.utils.data.DataLoader(subset, batch_size=self.args.batch_size)
-    #     self.val_global = sample_testset
-    
     def _train_condense_server(self, round_idx, client_indexes):
         syn_data = [self.syn_data[c][0] for c in client_indexes]
         syn_label = [self.syn_data[c][1] for c in client_indexes]
+        syn_data = torch.cat(syn_data)
+        syn_label = torch.cat(syn_label)
         selected_syn_data = (syn_data, syn_label)
-        self.model_trainer.train_wth_condense(selected_syn_data, self.device, self.args)
+        if self.args.condense_train_type == "ce":
+            self.model_trainer.train_wth_condense(selected_syn_data, self.val_global,
+                                                  self.device, self.args)
+        elif self.args.condense_train_type == "soft":
+            self.model_trainer.train_wth_condense_soft(selected_syn_data, self.val_global,
+                                                      self.device, self.args)
+        else :
+            raise ValueError
+            exit()
     
     def _ensemble_distillation(self, round_idx, avg_logits):
 
@@ -280,27 +316,7 @@ class FeddfAPI(object):
         
         '''hard sample mining'''
         if self.args.hard_sample :
-            # Pick idx of dataset
-            # 1. random 
-            # 2. loss
-            # 3. gradient?
-            # 4. KL?
-            hardsample_ratio = self.args.hard_sample_ratio
-            unlabeled_dataset = unlabeled_dataloader.dataset
-            total_data_num = len(unlabeled_dataloader.dataset)
-            indicies = list(range(total_data_num))
-            split = int(np.floor(total_data_num * hardsample_ratio))
-            np.random.seed(0)
-            np.random.shuffle(indicies)
-            
-            hardsample_idx = indicies[:split]
-            hard_dataset = Subset(unlabeled_dataset, hardsample_idx)
-            
-            unlabeled_dataloader = DataLoader(hard_dataset,
-                                              batch_size=self.args.unlabeled_batch_size,
-                                             num_workers=2,
-                                             shuffle=True,
-                                             pin_memory=True)
+            unlabeled_dataloader = self.hard_sample_loader
             
             
         
@@ -313,16 +329,21 @@ class FeddfAPI(object):
         stats['server_val_acc'] = round_server_val_acc
         logging.info(stats)
 
-    def _global_test_on_server(self, round_idx):
+    def _global_test_on_server(self, round_idx, name=""):
         logging.info("################global_test_on_server : {}".format(round_idx))
         server_metrics = self.model_trainer.test(self.test_global, self.device, self.args)
         # test on test dataset
         test_acc = server_metrics['test_correct'] / server_metrics['test_total']
         test_loss = server_metrics['test_loss'] / server_metrics['test_total']
 
-        stats = {'test_acc': test_acc, 'test_loss': test_loss, 'round_idx': round_idx}
-        wandb.log({"Server Test/Acc": test_acc, "round": round_idx}, step=round_idx)
-        wandb.log({"Server Test/Loss": test_loss, "round": round_idx}, step=round_idx)
+        if name : name = "-" + name
+        
+        stats = {'test_acc {}'.format(name): test_acc, 
+                 'test_loss {}'.format(name): test_loss, 'round_idx {}'.format(name): round_idx}
+        wandb.log({"Server Test/Acc{}".format(name): test_acc, 
+                   "round " : round_idx}, step=round_idx)
+        wandb.log({"Server Test/Loss{}".format(name): test_loss, 
+                   "round " : round_idx}, step=round_idx)
         logging.info(stats)
         self._update_stats(stats)
         
@@ -335,8 +356,8 @@ class FeddfAPI(object):
         test_loss = client_metrics['test_loss'] / client_metrics['test_total']
 
         stats = {'Client {} test_acc'.format(client.client_idx): test_acc, 'Client {} test_loss'.format(client.client_idx): test_loss, 'round_idx': round_idx}
-        wandb.log({"Client {}  Test/Acc".format(client.client_idx): test_acc, "round": round_idx}, step=round_idx)
-        wandb.log({"Client {} Test/Loss".format(client.client_idx): test_loss, "round": round_idx}, step=round_idx)
+        wandb.log({"Client Test/Acc of {}".format(client.client_idx): test_acc, "round": round_idx}, step=round_idx)
+        wandb.log({"Client Test/Loss of {}".format(client.client_idx): test_loss, "round": round_idx}, step=round_idx)
         #logging.info(stats)
         self._update_stats(stats)
         
