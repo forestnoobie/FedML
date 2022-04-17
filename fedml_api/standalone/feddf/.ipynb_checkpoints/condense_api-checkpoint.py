@@ -109,6 +109,10 @@ class FeddfAPI(object):
 
         self._setup_clients(train_data_local_num_dict, train_data_local_dict, test_data_local_dict, client_model_trainer)
         
+        '''Pre condensing for future use'''
+        self._setup_condense(round_idx=-1)
+
+        
 
 
     
@@ -156,7 +160,27 @@ class FeddfAPI(object):
         if self.fedmix:
             self.average_data = self.get_image_label_mean()
         logging.info("############setup_clients (END)#############")
+        
+    def _setup_condense(self, round_idx):
+        logging.info("############setup_condensing (START)#############")
+        # 1. Copy global init model
+        # 2. Broadcast to clients
+        # 3. Condense 
+        # 4. Save end program
+        w_global = copy.deepcopy(self.model_trainer.get_model_params())
+        
+        for idx, client in enumerate(self.client_list):
+            client.update_local_dataset(idx, self.train_data_local_dict[idx],
+                                        self.test_data_local_dict[idx],
+                                        self.train_data_local_num_dict[idx])
+            client.update_local_noaug_dataset(self.train_data_local_noaug_dict[idx])
 
+            syn_data = copy.deepcopy(self.syn_data[idx])
+            syn_data = client.condense(w_global, round_idx, syn_data)
+            self.syn_data[idx] = copy.deepcopy(syn_data)        
+        
+        logging.info("############setup_condensing (END)#############")
+        exit()
 
     def _init_logits(self):
         init_logits = torch.zeros(self.unlabeled_train_data_num, self.class_num, device=self.device)
@@ -209,8 +233,6 @@ class FeddfAPI(object):
                 if self.args.condense:
                     syn_data = copy.deepcopy(self.syn_data[client_idx])
                     client.update_local_noaug_dataset(self.train_data_local_noaug_dict[client_idx])
-                    # syn_data가 비어있을 때만 condense? arg_parser 또 만들어야되나? once + syn_Data가 없으면 condense . 
-                    # once가 아니면 그냥 바로 condense
                     w, condense_data = client.train_condense(copy.deepcopy(w_global), round_idx, syn_data)
                     w_locals.append((client.get_sample_number(), copy.deepcopy(w)))
                     self.syn_data[client_idx] = copy.deepcopy(condense_data)

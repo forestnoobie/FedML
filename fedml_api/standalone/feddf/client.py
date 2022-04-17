@@ -54,11 +54,11 @@ class Client:
         
     
     
-    def condense(self, weights):
+    def condense(self, w_global, round_idx, syn_data):
         self.model_trainer.set_model_params(w_global)
-        self.syn_data = self.model_trainer.condense_syndata(self.local_noaug_train_data, 
-                                                           self.syn_data, self.device, self.args)
-    
+        condense_data = self.model_trainer.condense(self.local_noaug_train_data, self.client_idx, round_idx, 
+                                                           syn_data, self.device, self.args)
+        return condense_data
 
     def local_test(self, b_use_test_dataset):
         if b_use_test_dataset:

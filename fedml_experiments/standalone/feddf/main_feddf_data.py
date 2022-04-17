@@ -32,7 +32,9 @@ from fedml_api.data_preprocessing.MNIST.data_loader import load_partition_data_m
 from fedml_api.model.linear.lr import LogisticRegression
 from fedml_api.model.cv.resnet_gn import resnet18
 
-from fedml_api.standalone.feddf.feddf_api import FeddfAPI
+#from fedml_api.standalone.feddf.feddf_api import FeddfAPI
+'''Test'''
+from fedml_api.standalone.feddf.condense_api import FeddfAPI
 from fedml_api.standalone.feddf.my_model_trainer_ensemble import MyModelTrainer as MyModelTrainerENS
 from fedml_api.standalone.feddf.my_model_trainer_ensemble import MyModelTrainer_full_logits as MyModelTrainerENS_full
 from fedml_api.standalone.feddf.my_model_trainer_ensemble import MyModelTrainer_fedmix as MyModelTrainerENS_Fedmix
@@ -468,6 +470,12 @@ def get_proj_name(pname):
     "-hardtype" + str(args.hard_sample) + "-hardratio" + str(args.hard_sample_ratio) + \
    "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix)
         project_name = "fedml-df-hard"
+    
+    elif pname == "test":
+        display_name = "Pre condensing data" + \
+         "-alpha" + str(args.partition_alpha) + "-dset_" + str(args.dataset) + \
+   "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-conrand_" + str(args.con_rand)
+        project_name = "testing"
 
     else :
         raise ValueError("Project name not defined")
