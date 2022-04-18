@@ -328,7 +328,7 @@ class MyModelTrainer(ModelTrainer):
         for i, lab in enumerate(labels_all):
             indices_class[lab].append(i)
         images_all = images_all.to(device)
-        labels_all = torch.tensor(labels_all, dtype=torch.long, device=device)
+        labels_all = torch.tensor(labels_all.clone().detach(), dtype=torch.long, device=device)
 
         for c in range(num_classes):
             print('class c = %d: %d real images'%(c, len(indices_class[c])))
@@ -388,7 +388,8 @@ class MyModelTrainer(ModelTrainer):
                     BN_flag =True
 
             if BN_flag :
-                img_real = torch.cat([get_images(c, BNSizePC) for c in range(num_classes)])
+                img_real = torch.cat([get_images(c, BNSizePC) for c in range(num_classes)
+                                      if get_images(c, BNSizePC ) is not None])
                 model.train() # for updating the mu, sigma of BatchNorm
                 output_real = model(img_real)
                 for module in model.modules():
