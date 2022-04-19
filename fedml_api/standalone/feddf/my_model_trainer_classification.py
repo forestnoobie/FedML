@@ -173,8 +173,12 @@ class MyModelTrainer(ModelTrainer):
             print('class c = %d: %d real images'%(c, len(indices_class[c])))
 
         def get_images(c, n): # get random n images from class c
-            idx_shuffle = np.random.permutation(indices_class[c])[:n]
-            return images_all[idx_shuffle]
+            # non iid setting where there is no image
+            if len(indices_class[c]) >  n:
+                idx_shuffle = np.random.permutation(indices_class[c])[:n]
+                return images_all[idx_shuffle]
+            else :
+                return None
 
         mean = []
         std = []
@@ -223,7 +227,8 @@ class MyModelTrainer(ModelTrainer):
                     BN_flag =True
 
             if BN_flag :
-                img_real = torch.cat([get_images(c, BNSizePC) for c in range(num_classes)])
+                img_real = torch.cat([get_images(c, BNSizePC) for c in range(num_classes)
+                                      if get_images(c, BNSizePC ) is not None])
                 model.train() # for updating the mu, sigma of BatchNorm
                 output_real = model(img_real)
                 for module in model.modules():
@@ -239,6 +244,9 @@ class MyModelTrainer(ModelTrainer):
 
             for c in range(num_classes) :
                 img_real = get_images(c, batch_real) # Batch size
+                if img_real is None : # No class images exist in this client
+                    continue 
+                
                 lab_real = torch.ones((img_real.shape[0], ), device=device, dtype=torch.long) * c
                 output_real = model(img_real)
                 loss_real = criterion(output_real, lab_real)
