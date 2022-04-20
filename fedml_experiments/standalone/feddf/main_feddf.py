@@ -31,6 +31,8 @@ from fedml_api.model.nlp.rnn import RNN_OriginalFedAvg, RNN_StackOverFlow
 from fedml_api.data_preprocessing.MNIST.data_loader import load_partition_data_mnist
 from fedml_api.model.linear.lr import LogisticRegression
 from fedml_api.model.cv.resnet_gn import resnet18
+from fedml_api.model.cv.resnet_wo_bn import resnet8_cifar as resnet8_no_bn
+
 
 from fedml_api.standalone.feddf.feddf_api import FeddfAPI
 from fedml_api.standalone.feddf.my_model_trainer_ensemble import MyModelTrainer as MyModelTrainerENS
@@ -67,11 +69,11 @@ def add_args(parser):
     parser.add_argument('--batch_size', type=int, default=128, metavar='N',
                         help='input batch size for training (default: 64)')
 
-    parser.add_argument('--client_optimizer', type=str, default='adam',
+    parser.add_argument('--client_optimizer', type=str, default='sgd',
                         help='SGD with momentum; adam')
 
-    parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
-                        help='learning rate (default: 0.001)')
+    parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
+                        help='learning rate (default: 0.1)')
 
     parser.add_argument('--wd', help='weight decay parameter;', type=float, default=0.001)
 
@@ -101,6 +103,9 @@ def add_args(parser):
 
     parser.add_argument('--split_unequally', help='Split unequally?', default=False,
                         action='store_true')
+    # Fedavg
+    parser.add_argument('--uniform_aggregate', help='Uniform averaging in aggregation', default=False,
+                        action='store_true')    
     
     # WANDB
     parser.add_argument('--pname', type=str, default='', metavar='N',
@@ -424,8 +429,10 @@ def create_model(args, model_name, output_dim):
         model = mobilenet(class_num=output_dim)
     elif model_name == "resnet8":
         model = resnet8(class_num=output_dim)
+    elif model_name == "resnet8_no_bn" and "cifar" in args.dataset:
+        model = resnet8_no_bn(dataset=args.dataset)
     else :
-        raise ValueError("No model name {}".format(model_name))
+        raise ValueError("No model name {} , {}".format(model_name, args.dataset))
 
     return model
 
@@ -459,16 +466,45 @@ def get_proj_name(pname):
              "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
         "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
     "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + \
-       "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix)
+       "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
         project_name = "fedcon"
         
     elif pname == "hard":
         display_name = "Feddf-Hard" + \
          "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
     "-hardtype" + str(args.hard_sample) + "-hardratio" + str(args.hard_sample_ratio) + \
-   "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix)
+   "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
         project_name = "fedml-df-hard"
 
+    elif pname == "feddf":
+        display_name = "Feddf" + "-localepoch_" + str(args.epochs)  + \
+         "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
+    "-localepoch_" + str(args.epochs) + \
+   "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
+        project_name = "fedcon"
+    
+    elif pname == "fedmix":
+        display_name = "Fedmix" + \
+         "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
+    "-localepoch_" + str(args.epochs) + "-unlabeldata_" + str(args.unlabeled_dataset) + \
+   "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-fedmixServer_" + \
+        str(args.fedmix_server) + "-model_" + str(args.model)
+        project_name = "fedcon"
+    
+    elif pname == "avg":
+        display_name = "Fedavg" + \
+         "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
+    "-localepoch_" + str(args.epochs) + "-model_" + str(args.model) + "-unlabeldata_" + str(args.unlabeled_dataset) + \
+   "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix)  + "-model_" + str(args.model)
+        project_name = "fedavg-0420"
+    
+    
+    elif pname == "test":
+        display_name = "Pre condensing data" + \
+         "-alpha" + str(args.partition_alpha) + "-dset_" + str(args.dataset) + \
+   "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-conrand_" + str(args.con_rand)
+        project_name = "testing"
+        
     else :
         raise ValueError("Project name not defined")
         

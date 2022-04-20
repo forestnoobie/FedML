@@ -371,26 +371,18 @@ class MyModelTrainer_fedmix(ModelTrainer):
                                                 shuffle=True)
 
         while curr_step < args.server_steps and patience_step < args.server_patience_steps:
-            batch_loss = []
-            avg_loader_iterator = iter(avg_loader)
-            
-            with tqdm(train_data, unit="Step") as tstep:
+            batch_loss = []            
+            with tqdm(avg_loader, unit="Step") as tstep:
                 for batch_idx, (images_1, labels_1) in enumerate(tstep):
                     tstep.set_description(f"Step {curr_step}")
-
-                    if curr_step < args.server_steps and patience_step < args.server_patience_steps:
-                        model.train()
-                        try : 
-                            data2 = next(avg_loader_iterator)
-                        except StopIteration:
-                            avg_loader_iterator = iter(avg_loader)
-                            data2 = next(avg_loader_iterator)
-                        
-                        images_2, labels_2 = data2[0], data2[1]                     
-                        output = model(images_2)
+                    if curr_step < args.server_steps and patience_step < args.server_patience_steps:                     
+                        images_1 = images_1.to(device)
+                        optimizer.zero_grad()
+                        model.zero_grad()
+                        output = model(images_1)
                         log_probs = F.log_softmax(output, dim=1)
                         # Get average logits from clients
-                        avg_logits = self.get_logits_from_clients(images_2, 
+                        avg_logits = self.get_logits_from_clients(images_1, 
                                                                   device, args)
                         # import ipdb; ipdb.set_trace(context=15)
                         # jacobian = torch.autograd.grad(outputs=log_probs[:,labels_1].sum(), inputs=images_1, retain_graph=True)[0].view(batch_size,1,-1)
@@ -404,11 +396,9 @@ class MyModelTrainer_fedmix(ModelTrainer):
                         
                         loss = criterion(log_probs, avg_logits)
                         loss.backward()
-                        # to avoid nan loss
-                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
-
                         optimizer.step()
-                        batch_loss.append(loss.item())
+                        scheduler.step()
+                        batch_loss.append(loss.clone().detach().item())
 
                         curr_step += 1
                         patience_step += 1
@@ -418,7 +408,6 @@ class MyModelTrainer_fedmix(ModelTrainer):
                             if curr_val_acc > best_val_acc:
                                 best_val_acc = curr_val_acc
                                 patience_step = 0
-                        scheduler.step()
 
                         tstep.set_postfix(val_acc=curr_val_acc, best_val_acc=best_val_acc, step_loss=loss.item())
 
@@ -426,7 +415,10 @@ class MyModelTrainer_fedmix(ModelTrainer):
                     else:
                         # If val_acc plateaus or reaches server_steps
                         break
-
+                
+                epoch_loss = sum(batch_loss) / len(batch_loss)
+                print("Epoch Loss : " , epoch_loss)
+                
                 # epoch += 1
                 # epoch_loss.append(sum(batch_loss) / len(batch_loss))
                 # logging.info("Server Epoch {} Validate acc {:.3f}".format(epoch, curr_val_acc.item()))

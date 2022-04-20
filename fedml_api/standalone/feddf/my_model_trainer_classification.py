@@ -54,11 +54,11 @@ class MyModelTrainer(ModelTrainer):
 
             for batch_idx, (x, labels) in enumerate(train_data):
                 x, labels = x.to(device), labels.to(device)
-                model.zero_grad()
                 optimizer.zero_grad()
                 log_probs = model(x)
                 loss = criterion(log_probs, labels)
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
                 optimizer.step()
                 
                 _, predicted = torch.max(log_probs, -1)
@@ -68,7 +68,6 @@ class MyModelTrainer(ModelTrainer):
                 batch_correct.append(correct.cpu().item())
                 batch_loss.append(loss.item())
 
-        
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
             logging.info('Client Index = {}\tEpoch: {}\tLoss: {:.6f} \tTrain acc : {:.6f}'.format(
                 self.id, epoch, sum(epoch_loss) / len(epoch_loss), sum(batch_correct) /total_num))
