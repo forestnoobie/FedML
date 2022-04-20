@@ -54,11 +54,11 @@ class MyModelTrainer(ModelTrainer):
 
             for batch_idx, (x, labels) in enumerate(train_data):
                 x, labels = x.to(device), labels.to(device)
-                model.zero_grad()
                 optimizer.zero_grad()
                 log_probs = model(x)
                 loss = criterion(log_probs, labels)
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
                 optimizer.step()
                 
                 _, predicted = torch.max(log_probs, -1)
@@ -68,7 +68,6 @@ class MyModelTrainer(ModelTrainer):
                 batch_correct.append(correct.cpu().item())
                 batch_loss.append(loss.item())
 
-        
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
             logging.info('Client Index = {}\tEpoch: {}\tLoss: {:.6f} \tTrain acc : {:.6f}'.format(
                 self.id, epoch, sum(epoch_loss) / len(epoch_loss), sum(batch_correct) /total_num))
@@ -173,8 +172,12 @@ class MyModelTrainer(ModelTrainer):
             print('class c = %d: %d real images'%(c, len(indices_class[c])))
 
         def get_images(c, n): # get random n images from class c
-            idx_shuffle = np.random.permutation(indices_class[c])[:n]
-            return images_all[idx_shuffle]
+            # non iid setting where there is no image
+            if len(indices_class[c]) >  n:
+                idx_shuffle = np.random.permutation(indices_class[c])[:n]
+                return images_all[idx_shuffle]
+            else :
+                return None
 
         mean = []
         std = []
@@ -214,31 +217,34 @@ class MyModelTrainer(ModelTrainer):
         
         
         for ol in range(outer_loops):
+            
             BN_flag = False
             BNSizePC = 16 # For batch normalization
 
-            for module in model.modules():
-                #if  "BatchNorm" in module._get_name():
-                if  "BatchNorm" in type(module).__name__:
-                    BN_flag =True
+#             for module in model.modules():
+#                 #if  "BatchNorm" in module._get_name():
+#                 if  "BatchNorm" in type(module).__name__:
+#                     BN_flag =True
 
-            if BN_flag :
-                img_real = torch.cat([get_images(c, BNSizePC) for c in range(num_classes)])
-                model.train() # for updating the mu, sigma of BatchNorm
-                output_real = model(img_real)
-                for module in model.modules():
-                    #if 'BatchNorm' in module._get_names():
-                    if  "BatchNorm" in type(module).__name__:
+#             if BN_flag :
+#                 img_real = torch.cat([get_images(c, BNSizePC) for c in range(num_classes)
+#                                       if get_images(c, BNSizePC ) is not None])
+#                 model.train() # for updating the mu, sigma of BatchNorm
+#                 output_real = model(img_real)
+#                 for module in model.modules():
+#                     #if 'BatchNorm' in module._get_names():
+#                     if  "BatchNorm" in type(module).__name__:
 
-                        model.eval() # fix mu and sigma for every BatchNorm Layer
-
-
+#                         model.eval() # fix mu and sigma for every BatchNorm Layer
 
             ## Update synthetic data
             loss = torch.tensor(0.0).to(device)
 
             for c in range(num_classes) :
                 img_real = get_images(c, batch_real) # Batch size
+                if img_real is None : # No class images exist in this client
+                    continue 
+                
                 lab_real = torch.ones((img_real.shape[0], ), device=device, dtype=torch.long) * c
                 output_real = model(img_real)
                 loss_real = criterion(output_real, lab_real)
@@ -286,21 +292,6 @@ class MyModelTrainer(ModelTrainer):
         loss_avg /= (num_classes*outer_loops)     
         
         logging.info('Condensing Complete')
-        
-#         '''save wrt round'''
-#         if round_idx % 10 == 0 or round_idx == args.comm_round -1:
-#             save_dir = os.path.join(args.wandb_save_dir, "./condense")
-#             save_name = os.path.join(save_dir, 
-#                                      'vis_ipc{}_r{}_c{}.png'.format(str(ipc), str(round_idx), str(client_idx)))
-
-#             image_syn_vis = copy.deepcopy(image_syn.detach().cpu())
-#             for ch in range(channel):
-#                 image_syn_vis[:, ch] = image_syn_vis[:, ch]  * std[ch] + mean[ch]
-#             image_syn_vis[image_syn_vis<0] = 0.0
-#             image_syn_vis[image_syn_vis>1] = 1.0
-#             save_image(image_syn_vis, save_name, nrow=ipc) # Trying normalize = True/False may get better visual effects.
-#             torch.save(image_syn_vis, save_name.replace("png","pt"))
-
             
         image_syn, label_syn =  copy.deepcopy(image_syn.detach()), copy.deepcopy(label_syn.detach())
         return (image_syn, label_syn)
@@ -308,13 +299,13 @@ class MyModelTrainer(ModelTrainer):
 
     def condense(self, train_data_no_aug, client_idx, round_idx, syn_data,
                        device, args):
-                
+        '''initial condensation'''  
         num_classes = args.class_num
         batch_real = args.batch_size
         ipc = args.image_per_class
         channel = args.channel
         #outer_loops, _ = get_loops(ipc) 
-        outer_loops = args.outer_loops
+        outer_loops = args.init_outer_loops
         
         ''' update model '''
         model = self.model
@@ -379,24 +370,24 @@ class MyModelTrainer(ModelTrainer):
         
         
         for ol in range(outer_loops):
-            BN_flag = False
-            BNSizePC = 16 # For batch normalization
+#             BN_flag = False
+#             BNSizePC = 16 # For batch normalization
 
-            for module in model.modules():
-                #if  "BatchNorm" in module._get_name():
-                if  "BatchNorm" in type(module).__name__:
-                    BN_flag =True
+# #             for module in model.modules():
+# #                 #if  "BatchNorm" in module._get_name():
+# #                 if  "BatchNorm" in type(module).__name__:
+# #                     BN_flag =True
 
-            if BN_flag :
-                img_real = torch.cat([get_images(c, BNSizePC) for c in range(num_classes)
-                                      if get_images(c, BNSizePC ) is not None])
-                model.train() # for updating the mu, sigma of BatchNorm
-                output_real = model(img_real)
-                for module in model.modules():
-                    #if 'BatchNorm' in module._get_names():
-                    if  "BatchNorm" in type(module).__name__:
+# #             if BN_flag :
+# #                 img_real = torch.cat([get_images(c, BNSizePC) for c in range(num_classes)
+# #                                       if get_images(c, BNSizePC ) is not None])
+# #                 model.train() # for updating the mu, sigma of BatchNorm
+# #                 output_real = model(img_real)
+# #                 for module in model.modules():
+# #                     #if 'BatchNorm' in module._get_names():
+# #                     if  "BatchNorm" in type(module).__name__:
 
-                        model.eval() # fix mu and sigma for every BatchNorm Layer
+# #                         model.eval() # fix mu and sigma for every BatchNorm Layer
 
 
 
@@ -406,11 +397,11 @@ class MyModelTrainer(ModelTrainer):
                 img_real = get_images(c, batch_real) # Batch size
                 if img_real is None : # No class images exist in this client
                     continue 
-                
+
                 lab_real = torch.ones((img_real.shape[0], ), device=device, dtype=torch.long) * c
                 output_real = model(img_real)
                 loss_real = criterion(output_real, lab_real)
-                gw_real = torch.autograd.grad(loss_real, net_parameters)
+                gw_real = torch.autograd.grad(loss_real, net_parameters, allow_unused=True)
                 gw_real = list((_.detach().clone() for _ in gw_real))
                 
                 random_class = np.random.randint(10)

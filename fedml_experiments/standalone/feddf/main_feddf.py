@@ -35,6 +35,8 @@ from fedml_api.model.cv.resnet_wo_bn import resnet8_cifar as resnet8_no_bn
 
 
 from fedml_api.standalone.feddf.feddf_api import FeddfAPI
+from fedml_api.standalone.feddf.fedcon_init_api import FeddfAPI as Fedcon_initAPI
+
 from fedml_api.standalone.feddf.my_model_trainer_ensemble import MyModelTrainer as MyModelTrainerENS
 from fedml_api.standalone.feddf.my_model_trainer_ensemble import MyModelTrainer_full_logits as MyModelTrainerENS_full
 from fedml_api.standalone.feddf.my_model_trainer_ensemble import MyModelTrainer_fedmix as MyModelTrainerENS_Fedmix
@@ -72,7 +74,7 @@ def add_args(parser):
     parser.add_argument('--client_optimizer', type=str, default='sgd',
                         help='SGD with momentum; adam')
 
-    parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
+    parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
                         help='learning rate (default: 0.1)')
 
     parser.add_argument('--wd', help='weight decay parameter;', type=float, default=0.001)
@@ -168,7 +170,15 @@ def add_args(parser):
     parser.add_argument('--outer_loops', help="Condensing iterations",
                        type=int, default=10)
     
+    '''condense_init'''
+    parser.add_argument('--condense_init', help='condensing at initializaiton only',
+                        action='store_true') 
+    
+    parser.add_argument('--init_outer_loops', help="Condensing iterations",
+                       type=int, default=100)
+    
     # Condense training
+
     
     parser.add_argument('--train_condense_server', help='train server with condense server',
                         action='store_true')
@@ -469,6 +479,15 @@ def get_proj_name(pname):
        "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
         project_name = "fedcon"
         
+    elif pname == "con-init":
+        display_name = "FedCon-init" + \
+             "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
+       "-coninit_" + str(args.condense_init) + "-initol_" + str(args.init_outer_loops) + \
+        "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
+    "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + \
+       "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
+        project_name = "fedcon"
+        
     elif pname == "hard":
         display_name = "Feddf-Hard" + \
          "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
@@ -559,6 +578,11 @@ if __name__ == "__main__":
     model_trainer = [server_model_trainer, client_model_trainer]
     
     logging.info(model)
-
-    feddfAPI = FeddfAPI(dataset, unlabeled_dataset, device, args, model_trainer)
-    feddfAPI.train()
+    
+    if args.pname == "con-init" :
+        feddfAPI = Fedcon_initAPI(dataset, unlabeled_dataset, device, args, model_trainer)
+        feddfAPI.train()        
+        
+    else :
+        feddfAPI = FeddfAPI(dataset, unlabeled_dataset, device, args, model_trainer)
+        feddfAPI.train()

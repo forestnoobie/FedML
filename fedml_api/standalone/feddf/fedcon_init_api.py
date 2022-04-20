@@ -112,6 +112,7 @@ class FeddfAPI(object):
 
         self._setup_clients(train_data_local_num_dict, train_data_local_dict, test_data_local_dict, client_model_trainer)
         self._init_logs()
+    
         
 
 
@@ -154,13 +155,22 @@ class FeddfAPI(object):
             if self.args.condense:
                 self.syn_data[client_idx] = (None, None)
                 c.update_local_noaug_dataset(self.train_data_local_noaug_dict[client_idx])
-
+                
             self.client_list.append(c)
             
         if self.fedmix:
             self.average_data = self.get_image_label_mean()
         logging.info("############setup_clients (END)#############")
-
+    
+    def _init_condense(self, w_global):
+        '''initiate condensing for all clients'''
+        logging.info("############init condense  (START)#############")
+        for client_idx, client in enumerate(self.client_list):
+            syn_data = copy.deepcopy(self.syn_data[client_idx])
+            condense_data = client.condense(w_global, round_idx=-1, syn_data=syn_data)
+            self.syn_data[client_idx] = copy.deepcopy(condense_data)
+            print("Get sample number temp", client.get_sample_number())
+        logging.info("############init condense  (END)#############")
 
     def _init_logits(self):
         init_logits = torch.zeros(self.unlabeled_train_data_num, self.class_num, device=self.device)
@@ -214,7 +224,12 @@ class FeddfAPI(object):
         # Save Dataframe
 
     def train(self):
-        w_global = copy.deepcopy(self.model_trainer.get_model_params())        
+       
+        w_global = copy.deepcopy(self.model_trainer.get_model_params())
+        
+        if self.args.condense_init:
+            self._init_condense(w_global)
+
         for round_idx in range(self.args.comm_round):
             logging.info("################Communication round : {}".format(round_idx))
 
@@ -241,7 +256,8 @@ class FeddfAPI(object):
                     client.update_average_dataset(self.average_data)
                 
                 '''condense'''
-                if self.args.condense:
+                if self.args.condense and not self.args.condense_init:
+                    ''' Condensation on and condense init off'''
                     syn_data = copy.deepcopy(self.syn_data[client_idx])
                     client.update_local_noaug_dataset(self.train_data_local_noaug_dict[client_idx])
                     # syn_data가 비어있을 때만 condense? arg_parser 또 만들어야되나? once + syn_Data가 없으면 condense . 
@@ -249,7 +265,7 @@ class FeddfAPI(object):
                     w, condense_data = client.train_condense(copy.deepcopy(w_global), round_idx, syn_data)
                     w_locals.append((client.get_sample_number(), copy.deepcopy(w)))
                     self.syn_data[client_idx] = copy.deepcopy(condense_data)
-                    
+
                 else : 
                     w = client.train(copy.deepcopy(w_global))
                     w_locals.append((client.get_sample_number(), copy.deepcopy(w)))

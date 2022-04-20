@@ -9,6 +9,8 @@ import torch
 import wandb
 from torch.nn import functional as F
 import numpy as np
+import pandas as pd
+
 import math
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, Subset
@@ -51,6 +53,7 @@ class FeddfAPI(object):
 
         ## For tracking best acc
         self._stats = defaultdict(int)
+        self._server_stats = defaultdict(int)
 
         ## For saving model directory
         self.save_model_dir = os.path.join(args.wandb_save_dir, "./model_parameters")
@@ -108,6 +111,7 @@ class FeddfAPI(object):
         self.model_trainer.class_num = class_num
 
         self._setup_clients(train_data_local_num_dict, train_data_local_dict, test_data_local_dict, client_model_trainer)
+        self._init_logs()
         
 
 
@@ -161,6 +165,20 @@ class FeddfAPI(object):
     def _init_logits(self):
         init_logits = torch.zeros(self.unlabeled_train_data_num, self.class_num, device=self.device)
         return init_logits
+    
+    
+    def _init_logs(self):
+        log_filename = './test_log.csv'
+        log_dir = os.path.join(self.args.wandb_save_dir, log_filename)
+        log_columns = ['test_loss', 'test_accuracy']
+        log_pd = pd.DataFrame(np.zeros([self.args.comm_round, len(log_columns)]), columns=log_columns)
+        
+        self.log_pd = log_pd
+        self.log_dir = log_dir
+      
+    def _update_logs(self, round_idx, log):        
+        self.log_pd.loc[round_idx] = log
+        self.log_pd.to_csv(self.log_dir)
 
     def _update_stats(self, stats):
         past_stats = self._stats
@@ -176,10 +194,30 @@ class FeddfAPI(object):
                 min_value = min(v, past_stats["best_" + k])
                 past_stats["best_" + k] = min_value
 
+        #logging.info(past_stats)
+    
+    def _update_server_stats(self, stats):
+        past_stats = self._server_stats
+
+        for k, v in stats.items():
+            if "best_" + k not in past_stats.keys(): # Default value
+                past_stats["best_" + k] = v
+
+            if 'acc' in k :
+                max_value = max(v, past_stats["best_" + k])
+                past_stats["best_" + k] = max_value
+            elif 'loss' in k :
+                min_value = min(v, past_stats["best_" + k])
+                past_stats["best_" + k] = min_value
+
         logging.info(past_stats)
+        # Save Dataframe
 
     def train(self):
+        
         w_global = copy.deepcopy(self.model_trainer.get_model_params())
+        self._init_condense(w_global)
+        
         for round_idx in range(self.args.comm_round):
             logging.info("################Communication round : {}".format(round_idx))
 
@@ -209,6 +247,8 @@ class FeddfAPI(object):
                 if self.args.condense:
                     syn_data = copy.deepcopy(self.syn_data[client_idx])
                     client.update_local_noaug_dataset(self.train_data_local_noaug_dict[client_idx])
+                    # syn_data가 비어있을 때만 condense? arg_parser 또 만들어야되나? once + syn_Data가 없으면 condense . 
+                    # once가 아니면 그냥 바로 condense
                     w, condense_data = client.train_condense(copy.deepcopy(w_global), round_idx, syn_data)
                     w_locals.append((client.get_sample_number(), copy.deepcopy(w)))
                     self.syn_data[client_idx] = copy.deepcopy(condense_data)
@@ -216,10 +256,10 @@ class FeddfAPI(object):
                 else : 
                     w = client.train(copy.deepcopy(w_global))
                     w_locals.append((client.get_sample_number(), copy.deepcopy(w)))
-                # Client test
-                if round_idx % self.args.frequency_of_the_test == 0:
-                    self._global_test_on_client(client, round_idx)
-                
+                    
+                # # Client test
+                # if round_idx % self.args.frequency_of_the_test == 0:
+                #     self._global_test_on_client(client, round_idx)
                 
                 # Save model
                 client.model_trainer.save_model(self.save_model_dir)
@@ -272,21 +312,39 @@ class FeddfAPI(object):
         return client_indexes
 
     def _aggregate(self, w_locals):
-        training_num = 0
-        for idx in range(len(w_locals)):
-            (sample_num, averaged_params) = w_locals[idx]
-            training_num += sample_num
+        if not self.args.uniform_aggregate :
+            training_num = 0
+            for idx in range(len(w_locals)):
+                (sample_num, averaged_params) = w_locals[idx]
+                training_num += sample_num
 
-        (sample_num, averaged_params) = w_locals[0]
-        for k in averaged_params.keys():
-            for i in range(0, len(w_locals)):
-                local_sample_number, local_model_params = w_locals[i]
-                w = local_sample_number / training_num
-                if i == 0:
-                    averaged_params[k] = local_model_params[k] * w
-                else:
-                    averaged_params[k] += local_model_params[k] * w
-        return averaged_params
+            (sample_num, averaged_params) = w_locals[0]
+            for k in averaged_params.keys():
+                for i in range(0, len(w_locals)):
+                    local_sample_number, local_model_params = w_locals[i]
+                    w = local_sample_number / training_num
+                    if i == 0:
+                        averaged_params[k] = local_model_params[k] * w
+                    else:
+                        averaged_params[k] += local_model_params[k] * w
+            return averaged_params
+        
+        else :
+            training_num = 0
+            for idx in range(len(w_locals)):
+                (sample_num, averaged_params) = w_locals[idx]
+                training_num += sample_num
+
+            (sample_num, averaged_params) = w_locals[0]
+            for k in averaged_params.keys():
+                for i in range(0, len(w_locals)):
+                    local_sample_number, local_model_params = w_locals[i]
+                    w = 1 / training_num ## Perform uniform averaging
+                    if i == 0:
+                        averaged_params[k] = local_model_params[k] * w
+                    else:
+                        averaged_params[k] += local_model_params[k] * w
+            return averaged_params
 
     def _train_condense_server(self, round_idx, client_indexes):
         syn_data = [self.syn_data[c][0] for c in client_indexes]
@@ -301,7 +359,7 @@ class FeddfAPI(object):
             self.model_trainer.train_wth_condense_soft(selected_syn_data, self.val_global,
                                                       self.device, self.args)
         else :
-            raise ValueError
+            raise ValueError("Undefined condense train type")
             exit()
     
     def _ensemble_distillation(self, round_idx, avg_logits):
@@ -335,7 +393,8 @@ class FeddfAPI(object):
         # test on test dataset
         test_acc = server_metrics['test_correct'] / server_metrics['test_total']
         test_loss = server_metrics['test_loss'] / server_metrics['test_total']
-
+        log = [test_loss, test_acc]
+        
         if name : name = "-" + name
         
         stats = {'test_acc {}'.format(name): test_acc, 
@@ -345,7 +404,9 @@ class FeddfAPI(object):
         wandb.log({"Server Test/Loss{}".format(name): test_loss, 
                    "round " : round_idx}, step=round_idx)
         logging.info(stats)
-        self._update_stats(stats)
+        
+        self._update_server_stats(stats)
+        self._update_logs(round_idx, log)
         
     def _global_test_on_client(self, client, round_idx):
         logging.info("################global_test_on_client : {} round : {}".format(client.client_idx ,round_idx))
