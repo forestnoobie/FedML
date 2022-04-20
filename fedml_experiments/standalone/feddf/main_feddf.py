@@ -477,7 +477,7 @@ def get_proj_name(pname):
         "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
     "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + \
        "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
-        project_name = "fedcon"
+        project_name = "fedcon-0420"
         
     elif pname == "con-init":
         display_name = "FedCon-init" + \
@@ -486,7 +486,7 @@ def get_proj_name(pname):
         "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
     "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + \
        "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
-        project_name = "fedcon"
+        project_name = "fedcon-0420"
         
     elif pname == "hard":
         display_name = "Feddf-Hard" + \
@@ -500,7 +500,7 @@ def get_proj_name(pname):
          "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
     "-localepoch_" + str(args.epochs) + \
    "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
-        project_name = "fedcon"
+        project_name = "fedcon-0420"
     
     elif pname == "fedmix":
         display_name = "Fedmix" + \
@@ -508,7 +508,7 @@ def get_proj_name(pname):
     "-localepoch_" + str(args.epochs) + "-unlabeldata_" + str(args.unlabeled_dataset) + \
    "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-fedmixServer_" + \
         str(args.fedmix_server) + "-model_" + str(args.model)
-        project_name = "fedcon"
+        project_name = "fedcon-0420"
     
     elif pname == "avg":
         display_name = "Fedavg" + \
