@@ -3,6 +3,7 @@
 .idea/*
 .vscode/*
 
+*/.ipynb_checkpoints/*
 *.pyc
 ./*/*.pyc
 ./*/*/*.pyc
