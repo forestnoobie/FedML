@@ -32,6 +32,7 @@ from fedml_api.data_preprocessing.MNIST.data_loader import load_partition_data_m
 from fedml_api.model.linear.lr import LogisticRegression
 from fedml_api.model.cv.resnet_gn import resnet18
 from fedml_api.model.cv.resnet_wo_bn import resnet8_cifar as resnet8_no_bn
+from fedml_api.model.cv.cnn import CNNCifar
 
 
 from fedml_api.standalone.feddf.feddf_api import FeddfAPI
@@ -441,6 +442,8 @@ def create_model(args, model_name, output_dim):
         model = resnet8(class_num=output_dim)
     elif model_name == "resnet8_no_bn" and "cifar" in args.dataset:
         model = resnet8_no_bn(dataset=args.dataset)
+    elif model_name == "cnn" and "cifar" in args.dataset:
+        model = CNNCifar(class_num=output_dim)
     else :
         raise ValueError("No model name {} , {}".format(model_name, args.dataset))
 
@@ -481,7 +484,7 @@ def get_proj_name(pname):
         
     elif pname == "con-init":
         display_name = "FedCon-init" + \
-             "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
+             "-localepoch_" + str(args.epochs) + "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
        "-coninit_" + str(args.condense_init) + "-initol_" + str(args.init_outer_loops) + \
         "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
     "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + \
