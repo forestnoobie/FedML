@@ -582,10 +582,6 @@ if __name__ == "__main__":
     
     logging.info(model)
     
-    if args.pname == "con-init" :
-        feddfAPI = Fedcon_initAPI(dataset, unlabeled_dataset, device, args, model_trainer)
-        feddfAPI.train()        
-        
-    else :
-        feddfAPI = FeddfAPI(dataset, unlabeled_dataset, device, args, model_trainer)
-        feddfAPI.train()
+
+    feddfAPI = FeddfAPI(dataset, unlabeled_dataset, device, args, model_trainer)
+    feddfAPI.train()

@@ -147,7 +147,7 @@ class MyModelTrainer(ModelTrainer):
                     tstep.set_description(f"Step {curr_step}")
                     
                     if curr_step < args.condense_server_steps and \
-                    patience_step < args.server_patience_steps:
+                    patience_step < args.condense_patience_steps:
                         x, _ = x.to(device), labels.to(device)
                         optimizer.zero_grad()
                         model.zero_grad()
