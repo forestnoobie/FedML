@@ -112,7 +112,6 @@ class FeddfAPI(object):
 
         self._setup_clients(train_data_local_num_dict, train_data_local_dict, test_data_local_dict, client_model_trainer)
         self._init_logs()
-    
         
 
 

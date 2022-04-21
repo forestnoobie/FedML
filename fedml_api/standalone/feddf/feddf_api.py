@@ -162,6 +162,16 @@ class FeddfAPI(object):
         logging.info("############setup_clients (END)#############")
 
 
+    def _init_condense(self, w_global):
+        '''initiate condensing for all clients'''
+        logging.info("############init condense  (START)#############")
+        for client_idx, client in enumerate(self.client_list):
+            syn_data = copy.deepcopy(self.syn_data[client_idx])
+            condense_data = client.condense(w_global, round_idx=-1, syn_data=syn_data)
+            self.syn_data[client_idx] = copy.deepcopy(condense_data)
+            print("Get sample number temp", client.get_sample_number())
+        logging.info("############init condense  (END)#############")
+        
     def _init_logits(self):
         init_logits = torch.zeros(self.unlabeled_train_data_num, self.class_num, device=self.device)
         return init_logits
@@ -241,7 +251,7 @@ class FeddfAPI(object):
                     client.update_average_dataset(self.average_data)
                 
                 '''condense'''
-                if self.args.condense:
+                if self.args.condense and not self.args.condense_init:
                     syn_data = copy.deepcopy(self.syn_data[client_idx])
                     client.update_local_noaug_dataset(self.train_data_local_noaug_dict[client_idx])
                     # syn_data가 비어있을 때만 condense? arg_parser 또 만들어야되나? once + syn_Data가 없으면 condense . 
