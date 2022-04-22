@@ -124,10 +124,11 @@ class MyModelTrainer(ModelTrainer):
 
                         ## Evaluate
                         if val_data:
-                            curr_val_acc = self.validate(val_data, device, args)
-                            if curr_val_acc > best_val_acc:
-                                best_val_acc = curr_val_acc
-                                patience_step = 0
+                            if curr_step + 1 % 100 == 0 :
+                                curr_val_acc = self.validate(val_data, device, args)
+                                if curr_val_acc > best_val_acc:
+                                    best_val_acc = curr_val_acc
+                                    patience_step = 0
                         scheduler.step()
 
                         tstep.set_postfix(val_acc=curr_val_acc, best_val_acc=best_val_acc, step_loss=loss.item())
@@ -144,7 +145,7 @@ class MyModelTrainer(ModelTrainer):
         # train with cross entropy
         condensed_ds = TensorDataset(condensed_data[0], condensed_data[1])
         condensed_dl = torch.utils.data.DataLoader(condensed_ds, batch_size=args.condense_batch_size, shuffle=True)
-
+    
         # init client_model
         self.load_client_models(device, args)
         
@@ -195,11 +196,12 @@ class MyModelTrainer(ModelTrainer):
 
                         ## Evaluate
                         if val_data:
-                            curr_val_acc = self.validate(val_data, device, args)
-                            if curr_val_acc > best_val_acc:
-                                best_val_acc = curr_val_acc
-                                patience_step = 0
-                        
+                            if curr_step + 1 % 100 == 0 :
+                                curr_val_acc = self.validate(val_data, device, args)
+                                if curr_val_acc > best_val_acc:
+                                    best_val_acc = curr_val_acc
+                                    patience_step = 0
+
                         tstep.set_postfix(val_acc=curr_val_acc,
                                           best_val_acc=best_val_acc, 
                                           step_loss=loss.item())
@@ -258,10 +260,11 @@ class MyModelTrainer(ModelTrainer):
 
                         ## Evaluate
                         if val_data:
-                            curr_val_acc = self.validate(val_data, device, args)
-                            if curr_val_acc > best_val_acc:
-                                best_val_acc = curr_val_acc
-                                patience_step = 0
+                            if curr_step + 1 % 100 == 0 :
+                                curr_val_acc = self.validate(val_data, device, args)
+                                if curr_val_acc > best_val_acc:
+                                    best_val_acc = curr_val_acc
+                                    patience_step = 0
                         
                         tstep.set_postfix(val_acc=curr_val_acc, bset_val_acc=best_val_acc, step_loss=loss.item())
                     
@@ -437,10 +440,11 @@ class MyModelTrainer_fedmix(ModelTrainer):
                         patience_step += 1
                         ## Evaluate
                         if val_data:
-                            curr_val_acc = self.validate(val_data, device, args)
-                            if curr_val_acc > best_val_acc:
-                                best_val_acc = curr_val_acc
-                                patience_step = 0
+                            if curr_step + 1 % 100 == 0 :
+                                curr_val_acc = self.validate(val_data, device, args)
+                                if curr_val_acc > best_val_acc:
+                                    best_val_acc = curr_val_acc
+                                    patience_step = 0
 
                         tstep.set_postfix(val_acc=curr_val_acc, best_val_acc=best_val_acc, step_loss=loss.item())
 
@@ -623,10 +627,11 @@ class MyModelTrainer_fedmix_wth_unlabel(ModelTrainer):
                         patience_step += 1
                         ## Evaluate
                         if val_data:
-                            curr_val_acc = self.validate(val_data, device, args)
-                            if curr_val_acc > best_val_acc:
-                                best_val_acc = curr_val_acc
-                                patience_step = 0
+                            if curr_step + 1 % 100 == 0 :
+                                curr_val_acc = self.validate(val_data, device, args)
+                                if curr_val_acc > best_val_acc:
+                                    best_val_acc = curr_val_acc
+                                    patience_step = 0
                         scheduler.step()
 
                         tstep.set_postfix(val_acc=curr_val_acc, best_val_acc=best_val_acc, step_loss=loss.item())
@@ -803,10 +808,11 @@ class MyModelTrainer_full_logits(ModelTrainer):
 
                         ## Evaluate
                         if val_data:
-                            curr_val_acc = self.validate(val_data, device, args)
-                            if curr_val_acc > best_val_acc:
-                                best_val_acc = curr_val_acc
-                                patience_step = 0
+                            if curr_step + 1 % 100 == 0 :
+                                curr_val_acc = self.validate(val_data, device, args)
+                                if curr_val_acc > best_val_acc:
+                                    best_val_acc = curr_val_acc
+                                    patience_step = 0
                         scheduler.step()
 
                         tstep.set_postfix(val_acc=curr_val_acc, best_val_acc=best_val_acc, step_loss=loss.item())
