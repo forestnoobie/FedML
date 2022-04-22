@@ -419,7 +419,6 @@ class MyModelTrainer(ModelTrainer):
             
             optimizer_img.zero_grad()
             loss.requires_grad_(True)
-            import ipdb;ipdb.set_trace(context=15)
             loss.backward()
             optimizer_img.step()
             loss_avg += loss.item()
