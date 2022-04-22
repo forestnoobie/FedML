@@ -249,7 +249,8 @@ class MyModelTrainer(ModelTrainer):
                 output_real = model(img_real)
                 loss_real = criterion(output_real, lab_real)
                 gw_real = torch.autograd.grad(loss_real, net_parameters)
-11                
+                gw_real = list((_.detach().clone() for _ in gw_real))
+                
                 random_class = np.random.randint(10)
                 if args.con_rand:
                     img_syn = image_syn[random_class*ipc: (random_class+1)*ipc].reshape((ipc, channel, im_size[0], im_size[1]))
@@ -344,7 +345,6 @@ class MyModelTrainer(ModelTrainer):
             std.append(temp_std)
             print('real images channel %d, mean = %.4f, std = %.4f'%(ch, mean[ch], std[ch]))
             
-
         ''' initialize the synthetic data '''
         im_size = (images_all.size()[-2], images_all.size()[-1])
         image_syn, label_syn = syn_data[0], syn_data[1]
@@ -365,8 +365,6 @@ class MyModelTrainer(ModelTrainer):
         optimizer_img.zero_grad()
         loss_avg = 0
         criterion = nn.CrossEntropyLoss().to(device)
-        model = self.model
-        
         
         for ol in range(outer_loops):
 #             BN_flag = False
@@ -392,6 +390,7 @@ class MyModelTrainer(ModelTrainer):
 
             ## Update synthetic data
             loss = torch.tensor(0.0).to(device)
+            loss_temp = []
             for c in range(num_classes) :
                 img_real = get_images(c, batch_real) # Batch size
                 if img_real is None : # No class images exist in this client
@@ -408,22 +407,25 @@ class MyModelTrainer(ModelTrainer):
                     img_syn = image_syn[random_class*ipc: (random_class+1)*ipc].reshape((ipc, channel, im_size[0], im_size[1]))
                 else :
                     img_syn = image_syn[c*ipc: (c+1)*ipc].reshape((ipc, channel, im_size[0], im_size[1]))
+                    
                 lab_syn = torch.ones((ipc, ), device=device, dtype=torch.long) * c                
                 output_syn = model(img_syn)
                 loss_syn = criterion(output_syn, lab_syn)
                 gw_syn = torch.autograd.grad(loss_syn, net_parameters, create_graph=True)
                 
                 loss += match_loss(gw_syn, gw_real, device)
+                loss_temp.append(loss.item())
             
             
             optimizer_img.zero_grad()
             loss.requires_grad_(True)
+            import ipdb;ipdb.set_trace(context=15)
             loss.backward()
             optimizer_img.step()
             loss_avg += loss.item()
             loss_log =  loss.detach().cpu().item()
             
-            if ol % 100 == 0 or ol == outer_loops -1 :
+            if  ol == outer_loops -1 :
                 logging.info('Outer loop idx : {}, loss {:.6f}'.format(ol, loss_log))            
                 save_dir = os.path.join(args.wandb_save_dir, "./condense")
                 save_name = os.path.join(save_dir, 

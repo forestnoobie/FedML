@@ -224,7 +224,11 @@ class FeddfAPI(object):
         # Save Dataframe
 
     def train(self):
-        w_global = copy.deepcopy(self.model_trainer.get_model_params())        
+        w_global = copy.deepcopy(self.model_trainer.get_model_params())   
+        
+        if self.args.condense_init:
+            self._init_condense(w_global)
+        
         for round_idx in range(self.args.comm_round):
             logging.info("################Communication round : {}".format(round_idx))
 
@@ -288,7 +292,7 @@ class FeddfAPI(object):
                 self._ensemble_distillation(round_idx, avg_logits)
             
             '''training server with condensed data''' 
-            if self.args.train_condense_server:
+            if self.args.train_condense_server :
                 if round_idx % self.args.frequency_of_the_test == 0:
                     self._global_test_on_server(round_idx, "con")          
                 self._train_condense_server(round_idx, client_indexes)

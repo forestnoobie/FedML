@@ -199,6 +199,11 @@ def add_args(parser):
     parser.add_argument('--con_rand', help='train server with condense server',
                         action='store_true')
 
+    parser.add_argument('--condense_batch_size', type=int, default=6, metavar='N',
+                        help='input batch size for training (default: 128)')
+    
+    parser.add_argument('--condense_optimizer', type=str, default='sgd',
+                        help='SGD with momentum; adam')
     
     # Hard Sampling
     parser.add_argument('--hard_sample', type=str, default='', metavar='LR',
@@ -491,6 +496,16 @@ def get_proj_name(pname):
        "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
         project_name = "fedcon-0420"
         
+    elif pname == "con-init-hp":
+        display_name = "FedCon-init-hp" + \
+             "-localepoch_" + str(args.epochs) + "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + "-conbatchsize_" + str(args.condense_batch_size) + \
+        "-conlr_"  + str(args.condense_lr) + "-conopt_" + str(args.condense_optimizer) + \
+       "-coninit_" + str(args.condense_init) + "-initol_" + str(args.init_outer_loops) + \
+        "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
+    "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + \
+       "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
+        project_name = "fedcon-hp"
+    
     elif pname == "hard":
         display_name = "Feddf-Hard" + \
          "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
@@ -566,6 +581,8 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
     torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
 
     # load data and unlabeled data
     args.split_equally = not args.split_unequally

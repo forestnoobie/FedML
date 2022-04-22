@@ -25,12 +25,9 @@ class MyModelTrainer(ModelTrainer):
     def set_model_params(self, model_parameters):
         self.model.load_state_dict(model_parameters)
 
-    def get_logits_from_clients(self, image, device ,args):
-        # Load model params in client instance
-        # Make model class
-        # Feedforward model in eval mode
-        # Need Current round selected clients
-
+    def load_client_models(self, device, args):
+        
+        
         selected_client_indexes = self.client_indexes
         flist = os.listdir(self.save_model_dir)
         save_paths = []
@@ -39,25 +36,47 @@ class MyModelTrainer(ModelTrainer):
             if int(selected_client) in selected_client_indexes.tolist():
                 save_paths.append(os.path.join(self.save_model_dir ,fname))
         assert len(save_paths) == len(selected_client_indexes)
-        data_num = image.size(0)
+        
         model = copy.deepcopy(self.model)
-        avg_logits = torch.zeros(data_num, self.class_num, device=device)
-
+        client_models = []
+        
         with torch.no_grad():
             for path in save_paths:
                 model.cpu().load_state_dict(torch.load(path))
                 model.eval()
-
-                image = image.to(device)
                 model = model.to(device)
-                avg_logits += model(image)
+                client_models.append(copy.deepcopy(model))
+        
+        self.client_models=client_models
+        
+    
+    def get_logits_from_clients(self, image, device ,args):
+        # Load model params in client instance
+        # Make model class
+        # Feedforward model in eval mode
+        # Need Current round selected clients
+        
+        data_num = image.size(0)
+        model = copy.deepcopy(self.model)
+        avg_logits = torch.zeros(data_num, self.class_num, device=device)
+        
+        with torch.no_grad():
+            for client_model in self.client_models:
 
-        avg_logits /= len(save_paths)
+                client_model.eval()
+                image = image.to(device)
+                client_model = client_model.to(device)
+                avg_logits += client_model(image)
+
+        avg_logits /= len(self.client_models)
         avg_logits = F.softmax(avg_logits, dim=1)
         return avg_logits.detach()
 
     # Online Training
     def train(self, train_data, val_data, device, args):
+        
+        # init client_model
+        self.load_client_models(device, args)
 
         model = self.model
         model.to(device)
@@ -84,6 +103,7 @@ class MyModelTrainer(ModelTrainer):
                     tstep.set_description(f"Step {curr_step}")
 
                     if curr_step < args.server_steps and patience_step < args.server_patience_steps:
+                        model.train()
                         x, _ = x.to(device), labels.to(device)
                         optimizer.zero_grad()
                         model.zero_grad()
@@ -116,38 +136,47 @@ class MyModelTrainer(ModelTrainer):
                         # If val_acc plateaus or reaches server_steps
                         break
                         
+        del self.client_models
         return best_val_acc
     
     def train_wth_condense_soft(self, condensed_data, val_data, device, args):
         # make dataset and dataloader
         # train with cross entropy
         condensed_ds = TensorDataset(condensed_data[0], condensed_data[1])
-        condensed_dl = torch.utils.data.DataLoader(condensed_ds, batch_size=6, shuffle=True)
+        condensed_dl = torch.utils.data.DataLoader(condensed_ds, batch_size=args.condense_batch_size, shuffle=True)
 
+        # init client_model
+        self.load_client_models(device, args)
+        
         model = self.model
         model.to(device)
         model.train()
         
         # train and update
         criterion = nn.KLDivLoss(reduction='batchmean').to(device)
-
-        optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.condense_lr)
+        
+        if args.condense_optimizer == "sgd":
+            optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.condense_lr)
+        elif args.condense_optimizer == 'adam':
+            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.condense_lr,
+                               amsgrad=True)
+        else :
+            raise ValueError("{} not defined".format(args.condense_optimizer))
           
         epoch_loss = []
         curr_step = 0
         patience_step = 0
         curr_val_acc = 0
         best_val_acc = 0
-
         while curr_step < args.condense_server_steps and \
         patience_step < args.condense_patience_steps:
             batch_loss = []
             with tqdm(condensed_dl) as tstep:
                 for batch_idx, (x, labels) in enumerate(tstep):
                     tstep.set_description(f"Step {curr_step}")
-                    
                     if curr_step < args.condense_server_steps and \
                     patience_step < args.condense_patience_steps:
+                        model.train()
                         x, _ = x.to(device), labels.to(device)
                         optimizer.zero_grad()
                         model.zero_grad()
@@ -174,12 +203,12 @@ class MyModelTrainer(ModelTrainer):
                         tstep.set_postfix(val_acc=curr_val_acc,
                                           best_val_acc=best_val_acc, 
                                           step_loss=loss.item())
+
                     else :
                         break
                 
                 logging.info("Epoch loss : {}".format(sum(batch_loss) / len(batch_loss)))
-
-
+        del self.client_models
         return best_val_acc
     
     def train_wth_condense(self, condensed_data, val_data, device, args):
@@ -187,7 +216,10 @@ class MyModelTrainer(ModelTrainer):
         # train with cross entropy
         condensed_ds = TensorDataset(condensed_data[0], condensed_data[1])
         condensed_dl = torch.utils.data.DataLoader(condensed_ds, batch_size=16, shuffle=True)
-
+        
+        # init clients
+        self.load_client_models(device, args)
+        
         model = self.model
         model.to(device)
         model.train()
@@ -212,6 +244,7 @@ class MyModelTrainer(ModelTrainer):
                     
                     if curr_step < args.condense_server_steps and \
                     patience_step < args.server_patience_steps:
+                        model.train()
                         x, labels = x.to(device), labels.to(device)
                         optimizer.zero_grad()
                         model.zero_grad()
@@ -237,7 +270,7 @@ class MyModelTrainer(ModelTrainer):
                     
                 logging.info("Epoch loss : {}".format(sum(batch_loss) / len(batch_loss)))
 
-
+        del self.client_models
         return best_val_acc
     
     
