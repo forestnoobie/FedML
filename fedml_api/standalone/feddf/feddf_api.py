@@ -216,12 +216,12 @@ class FeddfAPI(object):
             if 'acc' in k :
                 max_value = max(v, past_stats["best_" + k])
                 past_stats["best_" + k] = max_value
+                wandb.run.summary["best_accuracy"] = max_value
             elif 'loss' in k :
                 min_value = min(v, past_stats["best_" + k])
                 past_stats["best_" + k] = min_value
 
         logging.info(past_stats)
-        # Save Dataframe
 
     def train(self):
         w_global = copy.deepcopy(self.model_trainer.get_model_params())   
