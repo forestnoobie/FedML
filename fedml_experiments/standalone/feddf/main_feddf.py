@@ -32,7 +32,7 @@ from fedml_api.data_preprocessing.MNIST.data_loader import load_partition_data_m
 from fedml_api.model.linear.lr import LogisticRegression
 from fedml_api.model.cv.resnet_gn import resnet18
 from fedml_api.model.cv.resnet_wo_bn import resnet8_cifar as resnet8_no_bn
-from fedml_api.model.cv.cnn import CNNCifar
+from fedml_api.model.cv.cnn import CNNCifar, CNN_OriginalFedAvg
 
 
 from fedml_api.standalone.feddf.feddf_api import FeddfAPI
@@ -85,7 +85,7 @@ def add_args(parser):
 
     parser.add_argument('--client_num_in_total', type=int, default=10, metavar='NN',
                         help='number of workers in a distributed cluster')
-
+ 
     parser.add_argument('--client_num_per_round', type=int, default=10, metavar='NN',
                         help='number of workers')
 
@@ -124,7 +124,7 @@ def add_args(parser):
 
     # For Ensemble distillation
 
-    parser.add_argument('--unlabeled_data_dir', type=str, default='', metavar='N',
+    parser.add_argument('--unlabeled_data_dir', type=str, default='/home/osilab7/hdd/cifar', metavar='N',
                         help='Unlabeled dataset used for ensemble')
 
     parser.add_argument('--unlabeled_dataset', type=str, default='cifar100', metavar='N',
@@ -232,15 +232,14 @@ def load_data(args, dataset_name):
 
     if dataset_name == "mnist":
         logging.info("load_data. dataset_name = %s" % dataset_name)
-        client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
-        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
-        class_num = load_partition_data_mnist(args.batch_size)
-        """
-        For shallow NN or linear models, 
-        we uniformly sample a fraction of clients each round (as the original FedAvg paper)
-        """
-        args.client_num_in_total = client_num
+        
         args.channel = 1
+        
+        train_data_num, test_data_num, train_data_global, test_data_global, \
+        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
+        class_num, *valid_idxs = load_partition_data_mnist(args.dataset, args.data_dir, args.partition_method,
+                                args.partition_alpha, args.client_num_in_total, args.batch_size,
+                                             args.valid_ratio, split_equally=args.split_equally, randaug=args.randaug, condense=args.condense)    
 
     elif dataset_name == "femnist":
         logging.info("load_data. dataset_name = %s" % dataset_name)
@@ -248,75 +247,6 @@ def load_data(args, dataset_name):
         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num = load_partition_data_federated_emnist(args.dataset, args.data_dir)
         args.client_num_in_total = client_num
-
-    elif dataset_name == "shakespeare":
-        logging.info("load_data. dataset_name = %s" % dataset_name)
-        client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
-        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
-        class_num = load_partition_data_shakespeare(args.batch_size)
-        args.client_num_in_total = client_num
-
-    elif dataset_name == "fed_shakespeare":
-        logging.info("load_data. dataset_name = %s" % dataset_name)
-        client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
-        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
-        class_num = load_partition_data_federated_shakespeare(args.dataset, args.data_dir)
-        args.client_num_in_total = client_num
-
-    elif dataset_name == "fed_cifar100":
-        logging.info("load_data. dataset_name = %s" % dataset_name)
-        client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
-        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
-        class_num = load_partition_data_federated_cifar100(args.dataset, args.data_dir)
-        args.client_num_in_total = client_num
-    elif dataset_name == "stackoverflow_lr":
-        logging.info("load_data. dataset_name = %s" % dataset_name)
-        client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
-        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
-        class_num = load_partition_data_federated_stackoverflow_lr(args.dataset, args.data_dir)
-        args.client_num_in_total = client_num
-    elif dataset_name == "stackoverflow_nwp":
-        logging.info("load_data. dataset_name = %s" % dataset_name)
-        client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
-        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
-        class_num = load_partition_data_federated_stackoverflow_nwp(args.dataset, args.data_dir)
-        args.client_num_in_total = client_num
-
-    elif dataset_name == "ILSVRC2012":
-        logging.info("load_data. dataset_name = %s" % dataset_name)
-        train_data_num, test_data_num, train_data_global, test_data_global, \
-        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
-        class_num = load_partition_data_ImageNet(dataset=dataset_name, data_dir=args.data_dir,
-                                                 partition_method=None, partition_alpha=None,
-                                                 client_number=args.client_num_in_total, batch_size=args.batch_size)
-
-    elif dataset_name == "gld23k":
-        logging.info("load_data. dataset_name = %s" % dataset_name)
-        args.client_num_in_total = 233
-        fed_train_map_file = os.path.join(args.data_dir, 'mini_gld_train_split.csv')
-        fed_test_map_file = os.path.join(args.data_dir, 'mini_gld_test.csv')
-
-        train_data_num, test_data_num, train_data_global, test_data_global, \
-        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
-        class_num = load_partition_data_landmarks(dataset=dataset_name, data_dir=args.data_dir,
-                                                  fed_train_map_file=fed_train_map_file,
-                                                  fed_test_map_file=fed_test_map_file,
-                                                  partition_method=None, partition_alpha=None,
-                                                  client_number=args.client_num_in_total, batch_size=args.batch_size)
-
-    elif dataset_name == "gld160k":
-        logging.info("load_data. dataset_name = %s" % dataset_name)
-        args.client_num_in_total = 1262
-        fed_train_map_file = os.path.join(args.data_dir, 'federated_train.csv')
-        fed_test_map_file = os.path.join(args.data_dir, 'test.csv')
-
-        train_data_num, test_data_num, train_data_global, test_data_global, \
-        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
-        class_num = load_partition_data_landmarks(dataset=dataset_name, data_dir=args.data_dir,
-                                                  fed_train_map_file=fed_train_map_file,
-                                                  fed_test_map_file=fed_test_map_file,
-                                                  partition_method=None, partition_alpha=None,
-                                                  client_number=args.client_num_in_total, batch_size=args.batch_size)
 
     else:
         if dataset_name == "cifar10":
@@ -449,6 +379,8 @@ def create_model(args, model_name, output_dim):
         model = resnet8_no_bn(dataset=args.dataset)
     elif model_name == "cnn" and "cifar" in args.dataset:
         model = CNNCifar(class_num=output_dim)
+    elif model_name == "cnn" and "mnist" in args.dataset:
+        model = CNN_OriginalFedAvg(class_num=output_dim)
     else :
         raise ValueError("No model name {} , {}".format(model_name, args.dataset))
 

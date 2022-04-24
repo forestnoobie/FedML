@@ -124,7 +124,7 @@ class MyModelTrainer(ModelTrainer):
 
                         ## Evaluate
                         if val_data:
-                            if curr_step + 1 % 100 == 0 :
+                            if curr_step % 100 == 0 :
                                 curr_val_acc = self.validate(val_data, device, args)
                                 if curr_val_acc > best_val_acc:
                                     best_val_acc = curr_val_acc
@@ -196,7 +196,7 @@ class MyModelTrainer(ModelTrainer):
 
                         ## Evaluate
                         if val_data:
-                            if curr_step + 1 % 100 == 0 :
+                            if curr_step % 100 == 0 :
                                 curr_val_acc = self.validate(val_data, device, args)
                                 if curr_val_acc > best_val_acc:
                                     best_val_acc = curr_val_acc
@@ -260,7 +260,7 @@ class MyModelTrainer(ModelTrainer):
 
                         ## Evaluate
                         if val_data:
-                            if curr_step + 1 % 100 == 0 :
+                            if curr_step  % 100 == 0 :
                                 curr_val_acc = self.validate(val_data, device, args)
                                 if curr_val_acc > best_val_acc:
                                     best_val_acc = curr_val_acc
@@ -440,7 +440,7 @@ class MyModelTrainer_fedmix(ModelTrainer):
                         patience_step += 1
                         ## Evaluate
                         if val_data:
-                            if curr_step + 1 % 100 == 0 :
+                            if curr_step % 100 == 0 :
                                 curr_val_acc = self.validate(val_data, device, args)
                                 if curr_val_acc > best_val_acc:
                                     best_val_acc = curr_val_acc
