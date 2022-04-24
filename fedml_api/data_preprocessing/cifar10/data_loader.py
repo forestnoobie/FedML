@@ -531,7 +531,6 @@ def load_partition_data_cifar10(dataset, data_dir, partition_method, partition_a
             labels_all = torch.tensor(labels_all, dtype=torch.long)
             data_local_noaug[client_idx] = (images_all, labels_all)
     
-    import ipdb; ipdb.set_trace(context=15)
     if valid_ratio > 0.0 and not condense:
         # Get valid dataloader
         dataidxs = valid_idxs
