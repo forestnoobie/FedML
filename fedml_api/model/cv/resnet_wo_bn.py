@@ -24,7 +24,7 @@ def norm2d(group_norm_num_groups, planes):
         # group_norm_num_groups == 1 -> LayerNorm
         return nn.GroupNorm(group_norm_num_groups, planes)
     else:
-        return nn.BatchNorm2d(planes)
+        return nn.BatchNorm2d(planes,  track_running_stats=False)
 
 
 class BasicBlock(nn.Module):
@@ -205,13 +205,13 @@ class ResNetBase(nn.Module):
     def train(self, mode=True):
         super(ResNetBase, self).train(mode)
 
-        # if self.freeze_bn:
-        #     for m in self.modules():
-        #         if isinstance(m, nn.BatchNorm2d):
-        #             m.eval()
-        #             if self.freeze_bn_affine:
-        #                 m.weight.requires_grad = False
-        #                 m.bias.requires_grad = False
+        if self.freeze_bn:
+            for m in self.modules():
+                if isinstance(m, nn.BatchNorm2d):
+                    m.eval()
+                    if self.freeze_bn_affine:
+                        m.weight.requires_grad = False
+                        m.bias.requires_grad = False
 
 
 class ResNet_imagenet(ResNetBase):

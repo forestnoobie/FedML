@@ -46,7 +46,6 @@ class MyModelTrainer(ModelTrainer):
                 model.eval()
                 model = model.to(device)
                 client_models.append(copy.deepcopy(model))
-        
         self.client_models=client_models
         
     
@@ -57,7 +56,6 @@ class MyModelTrainer(ModelTrainer):
         # Need Current round selected clients
         
         data_num = image.size(0)
-        model = copy.deepcopy(self.model)
         avg_logits = torch.zeros(data_num, self.class_num, device=device)
         
         with torch.no_grad():

@@ -275,13 +275,13 @@ class FeddfAPI(object):
                 # Save model
                 client.model_trainer.save_model(self.save_model_dir)
                 
+ 
                 
                 # Gather average Logits for offline logits
                 # avg_logits += client.get_logits(self.unlabeled_train_data)
             # Initialize model fusion with aggregated w_global
             w_global = self._aggregate(w_locals)
             self.model_trainer.set_model_params(w_global)
-
             # update global weights with average logits
             avg_logits /= len(self.client_list)
             
