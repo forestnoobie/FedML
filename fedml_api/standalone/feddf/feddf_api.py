@@ -29,7 +29,6 @@ class FeddfAPI(object):
         self.test_global = test_data_global
         self.val_global = None
         train_data_local_noaug_dict = None
-
         # Divide valid and condense
         if args.valid_ratio > 0 and args.condense:
             self.val_global = valid_data_global[0]
