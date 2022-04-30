@@ -63,7 +63,6 @@ class CIFAR10_truncated(data.Dataset):
             target = np.array(cifar_dataobj.targets)
 
         if self.dataidxs is not None:
-            import ipdb; ipdb.set_trace()
             data = data[np.array(self.dataidxs)]
             target = target[np.array(self.dataidxs)]
 
