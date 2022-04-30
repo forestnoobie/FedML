@@ -533,16 +533,15 @@ def load_partition_data_cifar10(dataset, data_dir, partition_method, partition_a
     
     if valid_ratio > 0.0 and not condense:
         # Get valid dataloader
-        dataidxs = valid_idxs
+        dataidxs = valid_idxs[0]
         # validation batch size 1024 for fast validation and 2 num_workers
         valid_data_global, _ = get_dataloader_val_CIFAR10(data_dir, 1024, 64, dataidxs, num_workers=0)
-
         return train_data_num, test_data_num, train_data_global, test_data_global, \
            data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num, valid_data_global
     
     elif valid_ratio > 0.0 and condense:
         # Get valid dataloader
-        dataidxs = valid_idxs
+        dataidxs = valid_idxs[0]
         # validation batch size 1024 for fast validation and 2 num_workers
         valid_data_global, _ = get_dataloader_val_CIFAR10(data_dir, 1024, 64, dataidxs, num_workers=0)
         
