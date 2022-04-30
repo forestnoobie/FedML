@@ -43,8 +43,7 @@ class MyModelTrainer(ModelTrainer):
         if args.client_optimizer == "sgd":
             optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.lr)
         else:
-            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.lr,
-                                         weight_decay=args.wd, amsgrad=True)
+            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.lr)
 
         epoch_loss = []
         for epoch in range(args.epochs):
@@ -58,7 +57,7 @@ class MyModelTrainer(ModelTrainer):
                 log_probs = model(x)
                 loss = criterion(log_probs, labels)
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 5.0)
                 optimizer.step()
                 
                 _, predicted = torch.max(log_probs, -1)
@@ -136,8 +135,7 @@ class MyModelTrainer(ModelTrainer):
         if args.client_optimizer == "sgd":
             optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.lr)
         else:
-            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.lr,
-                                         weight_decay=args.wd, amsgrad=True)
+            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.lr)
 
         epoch_loss = []
         for epoch in range(args.epochs):
@@ -151,7 +149,7 @@ class MyModelTrainer(ModelTrainer):
                 loss.backward()
 
                 # to avoid nan loss
-                #torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 5.0)
 
                 optimizer.step()
                 batch_loss.append(loss.item())
@@ -489,8 +487,7 @@ class MyModelTrainer(ModelTrainer):
         if args.client_optimizer == "sgd":
             optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.lr)
         else:
-            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.lr,
-                                         weight_decay=args.wd, amsgrad=True)
+            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.lr)
 
         epoch_loss = []
         for epoch in range(args.epochs):
@@ -504,7 +501,7 @@ class MyModelTrainer(ModelTrainer):
                 loss.backward()
 
                 # to avoid nan loss
-                #torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 5.0)
 
                 optimizer.step()
                 batch_loss.append(loss.item())
@@ -567,24 +564,24 @@ class MyModelTrainer(ModelTrainer):
         model = self.model
         
         
-        for ol in range(outer_loops):
-            BN_flag = False
-            BNSizePC = 16 # For batch normalization
+#         for ol in range(outer_loops):
+#             BN_flag = False
+#             BNSizePC = 16 # For batch normalization
 
-            for module in model.modules():
-                #if  "BatchNorm" in module._get_name():
-                if  "BatchNorm" in type(module).__name__:
-                    BN_flag =True
+#             for module in model.modules():
+#                 #if  "BatchNorm" in module._get_name():
+#                 if  "BatchNorm" in type(module).__name__:
+#                     BN_flag =True
 
-            if BN_flag :
-                img_real = torch.cat([get_images(c, BNSizePC) for c in range(num_classes)])
-                model.train() # for updating the mu, sigma of BatchNorm
-                output_real = model(img_real)
-                for module in model.modules():
-                    #if 'BatchNorm' in module._get_names():
-                    if  "BatchNorm" in type(module).__name__:
+#             if BN_flag :
+#                 img_real = torch.cat([get_images(c, BNSizePC) for c in range(num_classes)])
+#                 model.train() # for updating the mu, sigma of BatchNorm
+#                 output_real = model(img_real)
+#                 for module in model.modules():
+#                     #if 'BatchNorm' in module._get_names():
+#                     if  "BatchNorm" in type(module).__name__:
 
-                        model.eval() # fix mu and sigma for every BatchNorm Layer
+#                         model.eval() # fix mu and sigma for every BatchNorm Layer
 
 
 

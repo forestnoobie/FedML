@@ -18,10 +18,11 @@ from fedml_api.data_preprocessing.shakespeare.data_loader import load_partition_
 from fedml_api.data_preprocessing.fed_shakespeare.data_loader import load_partition_data_federated_shakespeare
 from fedml_api.data_preprocessing.stackoverflow_lr.data_loader import load_partition_data_federated_stackoverflow_lr
 from fedml_api.data_preprocessing.stackoverflow_nwp.data_loader import load_partition_data_federated_stackoverflow_nwp
+from fedml_api.data_preprocessing.stackoverflow_nwp.data_loader import load_partition_data_federated_stackoverflow_nwp
 from fedml_api.data_preprocessing.ImageNet.data_loader import load_partition_data_ImageNet
 from fedml_api.data_preprocessing.Landmarks.data_loader import load_partition_data_landmarks
 from fedml_api.model.cv.mobilenet import mobilenet
-from fedml_api.model.cv.resnet import resnet56
+from fedml_api.model.cv.resnet import resnet56, resnet8
 from fedml_api.model.cv.cnn import CNN_DropOut
 from fedml_api.data_preprocessing.FederatedEMNIST.data_loader import load_partition_data_federated_emnist
 from fedml_api.model.nlp.rnn import RNN_OriginalFedAvg, RNN_StackOverFlow
@@ -30,10 +31,12 @@ from fedml_api.data_preprocessing.MNIST.data_loader import load_partition_data_m
 from fedml_api.model.linear.lr import LogisticRegression
 from fedml_api.model.cv.resnet_gn import resnet18
 
+
 from fedml_api.standalone.fedavg.fedavg_api import FedAvgAPI
 from fedml_api.standalone.fedavg.my_model_trainer_classification import MyModelTrainer as MyModelTrainerCLS
 from fedml_api.standalone.fedavg.my_model_trainer_nwp import MyModelTrainer as MyModelTrainerNWP
 from fedml_api.standalone.fedavg.my_model_trainer_tag_prediction import MyModelTrainer as MyModelTrainerTAG
+from utils.utils import set_logger
 
 
 def add_args(parser):
@@ -88,6 +91,13 @@ def add_args(parser):
 
     parser.add_argument('--ci', type=int, default=0,
                         help='CI')
+
+    parser.add_argument('--seed', type=int, default=0,
+                        help="Seed")
+
+    parser.add_argument('--split_equally', help='Split equally?',
+                        action='store_true')
+
     return parser
 
 
@@ -202,7 +212,8 @@ def load_data(args, dataset_name):
         train_data_num, test_data_num, train_data_global, test_data_global, \
         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num = data_loader(args.dataset, args.data_dir, args.partition_method,
-                                args.partition_alpha, args.client_num_in_total, args.batch_size)
+                                args.partition_alpha, args.client_num_in_total, args.batch_size,
+                                split_equally=args.split_equally)
 
     if centralized:
         train_data_local_num_dict = {
@@ -261,8 +272,13 @@ def create_model(args, model_name, output_dim):
         model = RNN_StackOverFlow()
     elif model_name == "resnet56":
         model = resnet56(class_num=output_dim)
+    elif model_name == "resnet8":
+        model = resnet8(class_num=output_dim)
     elif model_name == "mobilenet":
         model = mobilenet(class_num=output_dim)
+    else :
+        raise ValueError("Model {} not defined".format(model))
+
     return model
 
 
@@ -276,29 +292,32 @@ def custom_model_trainer(args, model):
 
 
 if __name__ == "__main__":
-    logging.basicConfig()
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
-
     parser = add_args(argparse.ArgumentParser(description='FedAvg-standalone'))
     args = parser.parse_args()
-    logger.info(args)
-    device = torch.device("cuda:" + str(args.gpu) if torch.cuda.is_available() else "cpu")
-    logger.info(device)
 
     wandb.init(
         project="fedml",
-        name="FedAVG-r" + str(args.comm_round) + "-e" + str(args.epochs) + "-lr" + str(args.lr),
+        name="FedAVG_debug-r-" + str(args.comm_round) + "-e" + str(args.epochs) + "-lr" + str(args.lr) 
+             + '-' + str(args.dataset) + '-' + str(args.model) + "-alp" + str(args.partition_alpha),
         config=args
     )
+
+
+    # Set Logger
+    wandb_save_dir = '/'.join(wandb.run.dir.split('/')[-3:])
+    set_logger(os.path.join(wandb_save_dir, 'log.log'))
+    logging.info(args)
+    device = torch.device("cuda:" + str(args.gpu) if torch.cuda.is_available() else "cpu")
+    logging.info(device)
+
 
     # Set the random seed. The np.random seed determines the dataset partition.
     # The torch_manual_seed determines the initial weight.
     # We fix these two, so that we can reproduce the result.
-    random.seed(0)
-    np.random.seed(0)
-    torch.manual_seed(0)
-    torch.cuda.manual_seed_all(0)
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
     torch.backends.cudnn.deterministic = True
 
     # load data
