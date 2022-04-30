@@ -68,9 +68,10 @@ class MyModelTrainer(ModelTrainer):
                 batch_loss.append(loss.item())
 
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
-            logging.info('Client Index = {}\tEpoch: {}\tLoss: {:.6f} \tTrain acc : {:.6f}'.format(
-                self.id, epoch, sum(epoch_loss) / len(epoch_loss), sum(batch_correct) /total_num))
-        
+            if epoch + 1 == args.epochs :
+                logging.info('Client Index = {}\tEpoch: {}\tLoss: {:.6f} \tTrain acc : {:.6f}'.format(
+                    self.id, epoch, sum(epoch_loss) / len(epoch_loss), sum(batch_correct) /total_num))
+
 
     def test(self, test_data, device, args):
         model = self.model
@@ -154,8 +155,11 @@ class MyModelTrainer(ModelTrainer):
                 optimizer.step()
                 batch_loss.append(loss.item())
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
-            logging.info('Client Index = {}\tEpoch: {}\tLoss: {:.6f}'.format(
-                self.id, epoch, sum(epoch_loss) / len(epoch_loss)))
+            if epoch + 1 == args.epochs :
+                logging.info('Client Index = {}\tEpoch: {}\tLoss: {:.6f} \tTrain acc : {:.6f}'.format(
+                    self.id, epoch, sum(epoch_loss) / len(epoch_loss), sum(batch_correct) /total_num))
+
+
         
         ''' organize real dataset'''
         logging.info('Start Condensing')
@@ -506,8 +510,10 @@ class MyModelTrainer(ModelTrainer):
                 optimizer.step()
                 batch_loss.append(loss.item())
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
-            logging.info('Client Index = {}\tEpoch: {}\tLoss: {:.6f}'.format(
-                self.id, epoch, sum(epoch_loss) / len(epoch_loss)))
+            if epoch + 1 == args.epochs :
+                logging.info('Client Index = {}\tEpoch: {}\tLoss: {:.6f} \tTrain acc : {:.6f}'.format(
+                    self.id, epoch, sum(epoch_loss) / len(epoch_loss), sum(batch_correct) /total_num))
+
         
         ''' organize real dataset'''
         logging.info('Start Condensing')
