@@ -101,7 +101,7 @@ class MyModelTrainer(ModelTrainer):
                         x, _ = x.to(device), labels.to(device)
                         optimizer.zero_grad()
                         model.zero_grad()
-                        log_prob = model(x)s
+                        log_prob = model(x)
                         log_prob = F.log_softmax(log_prob, dim=1)
                         
                         # Get average logits from clients

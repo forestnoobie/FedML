@@ -216,8 +216,8 @@ class MyModelTrainer(ModelTrainer):
         
         for ol in range(outer_loops):
             
-            BN_flag = False
-            BNSizePC = 16 # For batch normalization
+#             BN_flag = False
+#             BNSizePC = 16 # For batch normalization
 
 #             for module in model.modules():
 #                 #if  "BatchNorm" in module._get_name():
@@ -564,7 +564,7 @@ class MyModelTrainer(ModelTrainer):
         model = self.model
         
         
-#         for ol in range(outer_loops):
+        for ol in range(outer_loops):
 #             BN_flag = False
 #             BNSizePC = 16 # For batch normalization
 
