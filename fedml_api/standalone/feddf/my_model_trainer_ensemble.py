@@ -66,6 +66,25 @@ class MyModelTrainer(ModelTrainer):
         avg_logits /= len(self.client_models)
         avg_logits = F.softmax(avg_logits, dim=1)
         return avg_logits.detach()
+    
+    def get_logits_from_one_client(self, image, client_model, device ,args):
+        # Load model params in client instance
+        # Make model class
+        # Feedforward model in eval mode
+        # Need Current round selected clients
+        
+        data_num = image.size(0)
+        one_logits = torch.zeros(data_num, self.class_num, device=device)
+        
+        with torch.no_grad():
+                client_model.eval()
+                image = image.to(device)
+                client_model = client_model.to(device)
+                one_logits += client_model(image)
+
+        one_logits = F.softmax(one_logits, dim=1)
+        return one_logits.detach()
+    
 
     # Online Training
     def train(self, train_data, val_data, device, args):
@@ -133,6 +152,83 @@ class MyModelTrainer(ModelTrainer):
                         
         del self.client_models
         return best_val_acc
+
+    def train_condense_only_one(self, condensed_data_dict, val_data, device, args):
+    
+        # one by one load client
+        # train model
+        # Client idx를 주면 avg logits이 아니라 그냥 logit를 돌려주도록 하는 함수 get_logit_from one client
+        # 아래 condense_soft 메서드 반복문 돌기
+
+        # init client_models
+        self.load_client_models(device, args)
+        model = self.model
+        model.to(device)
+        model.train()
+        
+        # train and update
+        criterion = nn.KLDivLoss(reduction='batchmean').to(device)
+        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.condense_lr)
+        scheduler = CosineAnnealingLR(optimizer, args.condense_server_steps)
+
+        for c_idx, c in enumerate(self.client_indexes):
+            c = self.client_indexes[0]
+            client_model = self.client_models[0]
+            condensed_ds = TensorDataset(condensed_data_dict[c][0], condensed_data_dict[c][1])
+            condensed_dl = torch.utils.data.DataLoader(condensed_ds, batch_size=6, shuffle=True) ## Temp batch size
+
+            epoch_loss = []
+            curr_step = 0
+            patience_step = 0
+            curr_val_acc = 0
+            best_val_acc = 0
+
+            #while curr_step < args.condense_server_steps and patience_step < args.condense_patience_steps: ## Temp steps
+            while curr_step < 500 and patience_step < 200:  ## Temp steps
+                batch_loss = []
+                with tqdm(condensed_dl) as tstep:
+                    for batch_idx, (x, labels) in enumerate(tstep):
+                        tstep.set_description(f"Step {curr_step}")
+                        if curr_step < args.condense_server_steps and \
+                        patience_step < args.condense_patience_steps:
+                            model.train()
+                            x, _ = x.to(device), labels.to(device)
+                            optimizer.zero_grad()
+                            model.zero_grad()
+                            log_prob = model(x)
+                            log_prob = F.log_softmax(log_prob, dim=1)
+
+                            # Get average logits from one client
+                            avg_logits = self.get_logits_from_one_client(x, client_model, device, args)
+
+                            loss = criterion(log_prob, avg_logits.detach())
+                            loss.backward()
+                            optimizer.step()
+                            scheduler.step()
+
+                            batch_loss.append(loss.detach().clone().item())
+                            curr_step += 1
+                            patience_step += 1
+
+                            ## Evaluate
+                            if val_data:
+                                if curr_step % 50 == 0 :  ## Temp
+                                    curr_val_acc = self.validate(val_data, device, args)
+                                    if curr_val_acc > best_val_acc:
+                                        best_val_acc = curr_val_acc
+                                        patience_step = 0
+
+                            tstep.set_postfix(val_acc=curr_val_acc,
+                                              best_val_acc=best_val_acc,
+                                              step_loss=loss.item())
+
+                        else :
+                            break
+
+                #logging.info("Epoch loss : {}".format(sum(batch_loss) / len(batch_loss)))
+        del self.client_models
+        return best_val_acc
+        
     
     def train_wth_condense_soft(self, condensed_data, val_data, device, args):
         # make dataset and dataloader
@@ -156,6 +252,8 @@ class MyModelTrainer(ModelTrainer):
             optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.condense_lr)
         else :
             raise ValueError("{} not defined".format(args.condense_optimizer))
+        scheduler = CosineAnnealingLR(optimizer, args.condense_server_steps)
+
           
         epoch_loss = []
         curr_step = 0
@@ -183,6 +281,8 @@ class MyModelTrainer(ModelTrainer):
                         loss = criterion(log_prob, avg_logits.detach())
                         loss.backward()
                         optimizer.step()
+                        scheduler.step()
+
                         batch_loss.append(loss.detach().clone().item())
                         curr_step += 1
                         patience_step += 1
@@ -202,7 +302,7 @@ class MyModelTrainer(ModelTrainer):
                     else :
                         break
                 
-                logging.info("Epoch loss : {}".format(sum(batch_loss) / len(batch_loss)))
+                #logging.info("Epoch loss : {}".format(sum(batch_loss) / len(batch_loss)))
         del self.client_models
         return best_val_acc
     
@@ -221,8 +321,15 @@ class MyModelTrainer(ModelTrainer):
         
         # train and update
         criterion = nn.CrossEntropyLoss().to(device)
+        
+        if args.condense_optimizer == "sgd":
+            optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.condense_lr)
+        elif args.condense_optimizer == 'adam':
+            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.condense_lr)
+        else :
+            raise ValueError("{} not defined".format(args.condense_optimizer))
+        scheduler = CosineAnnealingLR(optimizer, args.condense_server_steps)
 
-        optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.condense_lr)
           
         epoch_loss = []
         curr_step = 0
@@ -247,6 +354,7 @@ class MyModelTrainer(ModelTrainer):
                         loss = criterion(log_probs, labels)
                         loss.backward()
                         optimizer.step()
+                        scheduler.step()
                         batch_loss.append(loss.detach().clone().item())
                         curr_step += 1
                         patience_step += 1

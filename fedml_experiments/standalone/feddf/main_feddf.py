@@ -202,8 +202,8 @@ def add_args(parser):
     parser.add_argument('--condense_batch_size', type=int, default=6, metavar='N',
                         help='input batch size for training (default: 128)')
     
-    parser.add_argument('--condense_optimizer', type=str, default='sgd',
-                        help='SGD with momentum; adam')
+    parser.add_argument('--condense_optimizer', type=str, default='adam',
+                        help='Adam')
     
     # Hard Sampling
     parser.add_argument('--hard_sample', type=str, default='', metavar='LR',
@@ -212,6 +212,11 @@ def add_args(parser):
     parser.add_argument('--hard_sample_ratio', type=float, default=0.0, metavar='LR',
                         help='Ratio of hard sample')
    
+    # Test
+    parser.add_argument('--train_condense_server_onebyone', help='train server with condense client one by one',
+                        action='store_true')    
+    
+
     return parser
 
 
@@ -421,6 +426,15 @@ def get_proj_name(pname):
         
     elif pname == "con-init":
         display_name = "FedCon-init" + \
+             "-localepoch_" + str(args.epochs) + "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
+       "-coninit_" + str(args.condense_init) + "-initol_" + str(args.init_outer_loops) + \
+        "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
+    "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + \
+       "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
+        project_name = "fedcon-0420"
+
+    elif pname == "con-init-onebyone":
+        display_name = "FedCon-onebyone" + \
              "-localepoch_" + str(args.epochs) + "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
        "-coninit_" + str(args.condense_init) + "-initol_" + str(args.init_outer_loops) + \
         "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \

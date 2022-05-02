@@ -168,7 +168,6 @@ class FeddfAPI(object):
             syn_data = copy.deepcopy(self.syn_data[client_idx])
             condense_data = client.condense(w_global, round_idx=-1, syn_data=syn_data)
             self.syn_data[client_idx] = copy.deepcopy(condense_data)
-            print("Get sample number temp", client.get_sample_number())
         logging.info("############init condense  (END)#############")
         
     def _init_logits(self):
@@ -295,6 +294,12 @@ class FeddfAPI(object):
                 if round_idx % self.args.frequency_of_the_test == 0:
                     self._global_test_on_server(round_idx, "con")          
                 self._train_condense_server(round_idx, client_indexes)
+            
+            '''Train condensed data one by one not by ensemble'''
+            if self.args.train_condense_server_onebyone:
+                if round_idx % self.args.frequency_of_the_test == 0 :
+                    self._global_test_on_server(round_idx, "con1x1")
+                self._train_condense_onebyone(round_idx, client_indexes)
                 
             w_global = self.model_trainer.get_model_params()
             
@@ -355,7 +360,19 @@ class FeddfAPI(object):
                     else:
                         averaged_params[k] += local_model_params[k] * w
             return averaged_params
-
+    
+    def _train_condense_onebyone(self, round_idx, client_indexes):
+        selected_syn_data_dict = {}
+        for c in client_indexes:
+            syn_data = [self.syn_data[c][0]]
+            syn_label = [self.syn_data[c][1]]
+            syn_data = torch.cat(syn_data)
+            syn_label = torch.cat(syn_label)
+            selected_syn_data_dict[c] = (syn_data, syn_label)
+            
+        self.model_trainer.train_condense_only_one(selected_syn_data_dict, self.val_global, self.device, self.args)
+        
+    
     def _train_condense_server(self, round_idx, client_indexes):
         syn_data = [self.syn_data[c][0] for c in client_indexes]
         syn_label = [self.syn_data[c][1] for c in client_indexes]
