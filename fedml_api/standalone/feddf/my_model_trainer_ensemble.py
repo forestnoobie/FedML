@@ -99,7 +99,7 @@ class MyModelTrainer(ModelTrainer):
         # train and update
         criterion = nn.KLDivLoss(reduction='batchmean').to(device)
 
-        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.server_lr)
+        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.server_lr)
         scheduler = CosineAnnealingLR(optimizer, args.server_steps)
   
         epoch = 0
@@ -168,7 +168,7 @@ class MyModelTrainer(ModelTrainer):
         
         # train and update
         criterion = nn.KLDivLoss(reduction='batchmean').to(device)
-        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.condense_lr)
+        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.condense_lr)
         scheduler = CosineAnnealingLR(optimizer, args.condense_server_steps)
 
         for c_idx, c in enumerate(self.client_indexes):
@@ -247,9 +247,9 @@ class MyModelTrainer(ModelTrainer):
         criterion = nn.KLDivLoss(reduction='batchmean').to(device)
         
         if args.condense_optimizer == "sgd":
-            optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.condense_lr)
+            optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.condense_lr)
         elif args.condense_optimizer == 'adam':
-            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.condense_lr)
+            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.condense_lr)
         else :
             raise ValueError("{} not defined".format(args.condense_optimizer))
         scheduler = CosineAnnealingLR(optimizer, args.condense_server_steps)
@@ -323,9 +323,9 @@ class MyModelTrainer(ModelTrainer):
         criterion = nn.CrossEntropyLoss().to(device)
         
         if args.condense_optimizer == "sgd":
-            optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.condense_lr)
+            optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.condense_lr)
         elif args.condense_optimizer == 'adam':
-            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.condense_lr)
+            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.condense_lr)
         else :
             raise ValueError("{} not defined".format(args.condense_optimizer))
         scheduler = CosineAnnealingLR(optimizer, args.condense_server_steps)
@@ -441,6 +441,27 @@ class MyModelTrainer_fedmix(ModelTrainer):
 
     def set_model_params(self, model_parameters):
         self.model.load_state_dict(model_parameters)
+        
+    def load_client_models(self, device, args):
+        selected_client_indexes = self.client_indexes
+        flist = os.listdir(self.save_model_dir)
+        save_paths = []
+        for fname in flist:
+            selected_client = fname.split('_')[-1]
+            if int(selected_client) in selected_client_indexes.tolist():
+                save_paths.append(os.path.join(self.save_model_dir ,fname))
+        assert len(save_paths) == len(selected_client_indexes)
+        
+        model = copy.deepcopy(self.model)
+        client_models = []
+        
+        with torch.no_grad():
+            for path in save_paths:
+                model.cpu().load_state_dict(torch.load(path))
+                model.eval()
+                model = model.to(device)
+                client_models.append(copy.deepcopy(model))
+        self.client_models=client_models
 
     def get_logits_from_clients(self, image, device ,args):
         # Load model params in client instance
@@ -448,39 +469,28 @@ class MyModelTrainer_fedmix(ModelTrainer):
         # Feedforward model in eval mode
         # Need Current round selected clients
 
-        selected_client_indexes = self.client_indexes
-        flist = os.listdir(self.save_model_dir)
-        save_paths = []
-        for fname in flist:
-            selected_client = fname[-1]
-            if int(selected_client) in selected_client_indexes.tolist():
-                save_paths.append(os.path.join(self.save_model_dir ,fname))
-
-        # save_paths = [selected_client for selected_client in save_paths
-        #               if int(selected_client[-1]) in selected_client_indexes.tolist()]
-        # # Choose clients which are selected in this round
         data_num = image.size(0)
-        model = copy.deepcopy(self.model)
         avg_logits = torch.zeros(data_num, self.class_num, device=device)
-
+        
         with torch.no_grad():
-            for path in save_paths:
-                model.cpu().load_state_dict(torch.load(path))
-                model.eval()
-
+            for client_model in self.client_models:
+                client_model.eval()
                 image = image.to(device)
-                model = model.to(device)
-                avg_logits += model(image)
+                client_model = client_model.to(device)
+                avg_logits += client_model(image)
 
-        avg_logits /= len(save_paths)
+        avg_logits /= len(self.client_models)
         avg_logits = F.softmax(avg_logits, dim=1)
-        return avg_logits
+        return avg_logits.detach()
 
     # Online Training
     def train(self, train_data, average_data, val_data, device, args):
 
         image_means, label_means = average_data[0], average_data[1]
         image_means, label_means = image_means.to(device), label_means.to(device)
+        
+        # init client_model
+        self.load_client_models(device, args)
         
         model = self.model
         model.to(device)
@@ -489,7 +499,7 @@ class MyModelTrainer_fedmix(ModelTrainer):
         # train and update
         criterion = nn.KLDivLoss(reduction='batchmean').to(device)
 
-        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.server_lr)
+        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.server_lr)
         scheduler = CosineAnnealingLR(optimizer, args.server_steps)
 
         epoch = 0
@@ -503,7 +513,7 @@ class MyModelTrainer_fedmix(ModelTrainer):
         lam = args.lam
         avg_ds = TensorDataset(image_means, label_means)
         avg_loader = torch.utils.data.DataLoader(avg_ds,
-                                                 batch_size=args.unlabeled_batch_size,
+                                                 batch_size=16,
                                                 shuffle=True)
 
         while curr_step < args.server_steps and patience_step < args.server_patience_steps:
@@ -511,26 +521,18 @@ class MyModelTrainer_fedmix(ModelTrainer):
             with tqdm(avg_loader, unit="Step") as tstep:
                 for batch_idx, (images_1, labels_1) in enumerate(tstep):
                     tstep.set_description(f"Step {curr_step}")
+                    
                     if curr_step < args.server_steps and patience_step < args.server_patience_steps:                     
                         images_1 = images_1.to(device)
                         optimizer.zero_grad()
                         model.zero_grad()
                         output = model(images_1)
-                        log_probs = F.log_softmax(output, dim=1)
+                        log_prob = F.log_softmax(output, dim=1)
                         # Get average logits from clients
                         avg_logits = self.get_logits_from_clients(images_1, 
                                                                   device, args)
-                        # import ipdb; ipdb.set_trace(context=15)
-                        # jacobian = torch.autograd.grad(outputs=log_probs[:,labels_1].sum(), inputs=images_1, retain_graph=True)[0].view(batch_size,1,-1)
-                        # loss1 = (1-lam) * criterion(log_probs, avg_logits)
-                        # loss2 = (1-lam) * lam * torch.mean(torch.bmm(jacobian, images_2_.view(batch_size,-1,1)))
-                        # for i in range(args.class_num):
-                        #     if labels_2[0,i] > 0:
-                        #         labels_2_ = i * torch.ones_like(avg_logits).to(device)
-                        #         loss1 = loss1 + labels_2[0,i] * lam * criterion(log_probs, labels_2_)
-                        # loss = loss1 + loss2        
-                        
-                        loss = criterion(log_probs, avg_logits)
+          
+                        loss = criterion(log_prob, avg_logits)
                         loss.backward()
                         optimizer.step()
                         scheduler.step()
@@ -553,13 +555,10 @@ class MyModelTrainer_fedmix(ModelTrainer):
                         # If val_acc plateaus or reaches server_steps
                         break
                 
-                epoch_loss = sum(batch_loss) / len(batch_loss)
-                print("Epoch Loss : " , epoch_loss)
-                
-                # epoch += 1
-                # epoch_loss.append(sum(batch_loss) / len(batch_loss))
-                # logging.info("Server Epoch {} Validate acc {:.3f}".format(epoch, curr_val_acc.item()))
+                # epoch_loss = sum(batch_loss) / len(batch_loss)
+                # print("Epoch Loss : " , epoch_loss)
 
+        del self.client_models
         return best_val_acc
 
     def validate(self, val_data, device, args):
@@ -673,7 +672,7 @@ class MyModelTrainer_fedmix_wth_unlabel(ModelTrainer):
         # train and update
         criterion = nn.KLDivLoss(reduction='batchmean').to(device)
 
-        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.server_lr)
+        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.server_lr)
         scheduler = CosineAnnealingLR(optimizer, args.server_steps)
 
         epoch = 0
@@ -717,7 +716,7 @@ class MyModelTrainer_fedmix_wth_unlabel(ModelTrainer):
                         loss = lam * loss1 + (1-lam) * loss2
                         loss.backward()
                         # to avoid nan loss
-                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
 
                         optimizer.step()
                         batch_loss.append(loss.item())
@@ -860,7 +859,7 @@ class MyModelTrainer_full_logits(ModelTrainer):
         # train and update
         criterion = nn.KLDivLoss(reduction='batchmean').to(device)
 
-        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.server_lr)
+        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.server_lr)
         scheduler = CosineAnnealingLR(optimizer, args.server_steps)
 
         epoch = 0
@@ -896,7 +895,7 @@ class MyModelTrainer_full_logits(ModelTrainer):
                         loss.backward()
 
                         # to avoid nan loss
-                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
 
                         optimizer.step()
                         batch_loss.append(loss.item())

@@ -177,6 +177,20 @@ def add_args(parser):
     
     parser.add_argument('--init_outer_loops', help="Condensing iterations",
                        type=int, default=100)
+  
+    parser.add_argument('--coninit_load', help='Load condense data',
+                        action='store_true')
+    
+    parser.add_argument('--coninit_load_dir', type=str, default='./condata',
+                        help='data directory')
+
+    parser.add_argument('--coninit_save', help='Save condense data',
+                        action='store_true')
+
+    parser.add_argument('--coninit_save_dir', type=str, default='./condata',
+                        help='data directory')
+
+
     
     # Condense training
 
@@ -441,6 +455,13 @@ def get_proj_name(pname):
     "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + \
        "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
         project_name = "fedcon-0420"
+        
+    elif pname == "con-data-hp":
+        display_name = "FedCon-data-hp" + \
+             "-localepoch_" + str(args.epochs) + "-alpha" + str(args.partition_alpha) + \
+        "-iol" + str(args.init_outer_loops) + "-imglr" + str(args.image_lr) + "ipc" + str(args.image_per_class) + \
+         "-seed_" + str(args.seed) + "-cn_" + str(args.client_num_in_total) + "-model_" + str(args.model) 
+        project_name = "fedcon-data-hp"
         
     elif pname == "con-init-hp":
         display_name = "FedCon-init-hp" + \

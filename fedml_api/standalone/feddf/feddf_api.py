@@ -164,10 +164,49 @@ class FeddfAPI(object):
     def _init_condense(self, w_global):
         '''initiate condensing for all clients'''
         logging.info("############init condense  (START)#############")
-        for client_idx, client in enumerate(self.client_list):
-            syn_data = copy.deepcopy(self.syn_data[client_idx])
-            condense_data = client.condense(w_global, round_idx=-1, syn_data=syn_data)
-            self.syn_data[client_idx] = copy.deepcopy(condense_data)
+        
+        if self.args.coninit_load :
+            ## Loading init condense
+            logging.info("############init condense  (LOAD)#############")
+            load_folder = "alpha{}_clientnum{}_seed{}_{}".format(
+                                            self.args.partition_alpha, self.args.client_num_in_total, self.args.seed,
+                                            self.args.model)
+            load_fname = "imglr{}_ipc{}_ol{}.pt".format(
+                                            self.args.image_lr, self.args.image_per_class, self.args.init_outer_loops)
+            load_path = os.path.join(self.args.coninit_load_dir, load_folder)
+            loaded_f = torch.load(os.path.join(load_path, load_fname))
+            syn_data_load, w_global_load = loaded_f["syn_data"], loaded_f["w_global"]
+            self.syn_data = syn_data_load
+            
+            if w_global['conv1.weight'].sum() == w_global_load['conv1.weight'].sum():
+                print("Initial weight identical")
+
+            logging.info("############init condense  (LOAD)#############")
+
+            
+        else :
+            for client_idx, client in enumerate(self.client_list):
+                syn_data = copy.deepcopy(self.syn_data[client_idx])
+                condense_data = client.condense(w_global, round_idx=-1, syn_data=syn_data)
+                self.syn_data[client_idx] = copy.deepcopy(condense_data)
+        
+        
+        if self.args.coninit_save :
+            save_folder = "alpha{}_clientnum{}_seed{}_{}".format(
+                                            self.args.partition_alpha, self.args.client_num_in_total, self.args.seed,
+                                            self.args.model)
+            save_fname = "imglr{}_ipc{}_ol{}.pt".format(
+                                            self.args.image_lr, self.args.image_per_class, self.args.init_outer_loops)
+            save_path = os.path.join(self.args.coninit_save_dir, save_folder)
+            
+            ## makedirs
+            if not os.path.exists(save_path):
+                os.makedirs(save_path, exist_ok=True)
+            
+            con_dict = {"syn_data" : self.syn_data,
+                       "w_global" : w_global}
+            torch.save(con_dict, os.path.join(save_path, save_fname))
+        
         logging.info("############init condense  (END)#############")
         
     def _init_logits(self):
@@ -240,7 +279,6 @@ class FeddfAPI(object):
             client_indexes = self._client_sampling(round_idx, self.args.client_num_in_total,
                                                    self.args.client_num_per_round)
             logging.info("client_indexes = " + str(client_indexes))
-            
             for idx, client_idx in enumerate(client_indexes):# self.client_list is not important actually.. -> client_indexes
                 # update dataset
                 client = self.client_list[client_idx]

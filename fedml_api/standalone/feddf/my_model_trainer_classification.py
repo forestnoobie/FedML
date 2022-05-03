@@ -5,6 +5,7 @@ from _collections import defaultdict
 
 import torch
 from torch import nn
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from torchvision.utils import save_image
 import numpy as np
 
@@ -41,10 +42,10 @@ class MyModelTrainer(ModelTrainer):
         # train and update
         criterion = nn.CrossEntropyLoss().to(device)
         if args.client_optimizer == "sgd":
-            optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.lr)
+            optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
         else:
-            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.lr)
-
+            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
+            
         epoch_loss = []
         for epoch in range(args.epochs):
             batch_loss = []
@@ -57,7 +58,7 @@ class MyModelTrainer(ModelTrainer):
                 log_probs = model(x)
                 loss = criterion(log_probs, labels)
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 5.0)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
                 optimizer.step()
                 
                 _, predicted = torch.max(log_probs, -1)
@@ -66,6 +67,7 @@ class MyModelTrainer(ModelTrainer):
                 total_num += labels.size()[0]
                 batch_correct.append(correct.cpu().item())
                 batch_loss.append(loss.item())
+
 
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
             if epoch + 1 == args.epochs :
@@ -134,9 +136,9 @@ class MyModelTrainer(ModelTrainer):
         # train and update
         criterion = nn.CrossEntropyLoss().to(device)
         if args.client_optimizer == "sgd":
-            optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.lr)
+            optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
         else:
-            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.lr)
+            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
 
         epoch_loss = []
         for epoch in range(args.epochs):
@@ -150,7 +152,7 @@ class MyModelTrainer(ModelTrainer):
                 loss.backward()
 
                 # to avoid nan loss
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 5.0)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
 
                 optimizer.step()
                 batch_loss.append(loss.item())
@@ -367,30 +369,12 @@ class MyModelTrainer(ModelTrainer):
         
         optimizer_img = torch.optim.SGD([image_syn, ], lr=args.image_lr, momentum=0.5)
         optimizer_img.zero_grad()
+        scheduler = CosineAnnealingLR(optimizer_img, outer_loops)
+
         loss_avg = 0
         criterion = nn.CrossEntropyLoss().to(device)
         
         for ol in range(outer_loops):
-#             BN_flag = False
-#             BNSizePC = 16 # For batch normalization
-
-# #             for module in model.modules():
-# #                 #if  "BatchNorm" in module._get_name():
-# #                 if  "BatchNorm" in type(module).__name__:
-# #                     BN_flag =True
-
-# #             if BN_flag :
-# #                 img_real = torch.cat([get_images(c, BNSizePC) for c in range(num_classes)
-# #                                       if get_images(c, BNSizePC ) is not None])
-# #                 model.train() # for updating the mu, sigma of BatchNorm
-# #                 output_real = model(img_real)
-# #                 for module in model.modules():
-# #                     #if 'BatchNorm' in module._get_names():
-# #                     if  "BatchNorm" in type(module).__name__:
-
-# #                         model.eval() # fix mu and sigma for every BatchNorm Layer
-
-
 
             ## Update synthetic data
             loss = torch.tensor(0.0).to(device)
@@ -425,6 +409,7 @@ class MyModelTrainer(ModelTrainer):
             loss.requires_grad_(True)
             loss.backward()
             optimizer_img.step()
+            scheduler.step()
             loss_avg += loss.item()
             loss_log =  loss.detach().cpu().item()
             
@@ -463,7 +448,7 @@ class MyModelTrainer(ModelTrainer):
 #             save_image(image_syn_vis, save_name, nrow=ipc) # Trying normalize = True/False may get better visual effects.
 #             torch.save(image_syn_vis, save_name.replace("png","pt"))
 
-        "Check condense mean and std and lets save"
+        "Check condense mean and std and lets savoe"
         image_syn, label_syn =  copy.deepcopy(image_syn.detach()), copy.deepcopy(label_syn.detach())
             
         return (image_syn, label_syn)
@@ -486,9 +471,9 @@ class MyModelTrainer(ModelTrainer):
         # train and update
         criterion = nn.CrossEntropyLoss().to(device)
         if args.client_optimizer == "sgd":
-            optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.lr)
+            optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
         else:
-            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=args.lr)
+            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
 
         epoch_loss = []
         for epoch in range(args.epochs):
@@ -502,7 +487,7 @@ class MyModelTrainer(ModelTrainer):
                 loss.backward()
 
                 # to avoid nan loss
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 5.0)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
 
                 optimizer.step()
                 batch_loss.append(loss.item())
