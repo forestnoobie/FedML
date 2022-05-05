@@ -253,7 +253,7 @@ class FeddfAPI(object):
             if 'acc' in k :
                 max_value = max(v, past_stats["best_" + k])
                 past_stats["best_" + k] = max_value
-                wandb.run.summary["best_accuracy"] = max_value
+                wandb.run.summary["best_" + k] = max_value
             elif 'loss' in k :
                 min_value = min(v, past_stats["best_" + k])
                 past_stats["best_" + k] = min_value
@@ -471,7 +471,9 @@ class FeddfAPI(object):
         logging.info(stats)
         
         self._update_server_stats(stats)
-        self._update_logs(round_idx, log)
+        
+        if name == "":
+            self._update_logs(round_idx, log)
         
     def _global_test_on_client(self, client, round_idx):
         logging.info("################global_test_on_client : {} round : {}".format(client.client_idx ,round_idx))

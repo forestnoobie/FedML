@@ -423,6 +423,24 @@ def resnet8_cifar(dataset, **kwargs):
     
     return model    
 
+def resnet14_cifar(dataset, **kwargs):
+    """
+    Constructs a ResNet-4 model.
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained.
+    """
+    
+    model = ResNet_cifar(
+            dataset=dataset,
+            resnet_size= 14,
+            freeze_bn=True,
+            freeze_bn_affine=False, ## Able affine
+            group_norm_num_groups=None,
+        )
+    
+    return model  
+
 def resnet(conf, arch=None):
     resnet_size = int((arch if arch is not None else conf.arch).replace("resnet", ""))
     dataset = conf.data

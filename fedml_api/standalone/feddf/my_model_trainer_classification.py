@@ -284,10 +284,6 @@ class MyModelTrainer(ModelTrainer):
                                          'vis_ipc{}_ol{}_c{}_r{}.png'.format(str(ipc), str(ol), str(client_idx), str(round_idx)))
 
                 image_syn_vis = copy.deepcopy(image_syn.detach().cpu())
-                for ch in range(channel):
-                    image_syn_vis[:, ch] = image_syn_vis[:, ch]  * std[ch] + mean[ch]
-                image_syn_vis[image_syn_vis<0] = 0.0
-                image_syn_vis[image_syn_vis>1] = 1.0
                 save_image(image_syn_vis, save_name, nrow=ipc) # Trying normalize = True/False may get better visual effects.
                 torch.save(image_syn_vis, save_name.replace("png","pt"))
 

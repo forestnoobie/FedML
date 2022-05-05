@@ -277,12 +277,12 @@ def partition_data_equally(dataset, datadir, partition, n_nets, alpha, valid_rat
 
 # for centralized training
 def get_dataloader(dataset, datadir, train_bs, test_bs, dataidxs=None):
-    return get_dataloader_svhn(datadir, train_bs, test_bs, dataidxs)
+    return get_dataloader_SVHN(datadir, train_bs, test_bs, dataidxs)
 
 
 # for local devices
 def get_dataloader_test(dataset, datadir, train_bs, test_bs, dataidxs_train, dataidxs_test):
-    return get_dataloader_test_svhn(datadir, train_bs, test_bs, dataidxs_train, dataidxs_test)
+    return get_dataloader_test_SVHN(datadir, train_bs, test_bs, dataidxs_train, dataidxs_test)
 
 
 def get_unlabeled_dataloader_SVHN(datadir, train_bs, test_bs, dataidxs=None, num_workers=0, randaug=False):
