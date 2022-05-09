@@ -83,6 +83,19 @@ class TensorDataset(Dataset):
 
     def __len__(self):
         return self.images.shape[0]
+    
+class TensorDataset_client_idx(Dataset):
+    def __init__(self, images, labels, client_idx): # images: n x c x h x w tensor
+        self.images = images.detach().float()
+        self.labels = labels.detach()
+        self.client_idx = client_idx
+
+    def __getitem__(self, index):
+        return self.images[index], self.labels[index], self.client_idx[index]
+
+    def __len__(self):
+        return self.images.shape[0]
+    
 
 def match_loss(gw_syn, gw_real, device):
     dis = torch.tensor(0.0).to(device)

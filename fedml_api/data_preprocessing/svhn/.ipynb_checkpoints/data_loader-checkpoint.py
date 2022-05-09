@@ -73,7 +73,7 @@ def _data_transforms_svhn():
     return train_transform, valid_transform
 
 ##################
-def svhn(datadir):
+def load_svhn_data(datadir):
     train_transform, test_transform = _data_transforms_svhn()
 
     svhn_train_ds = SVHN_truncated(datadir, train=True, download=True, transform=train_transform)
@@ -83,11 +83,21 @@ def svhn(datadir):
     X_test, y_test = svhn_test_ds.data, svhn_test_ds.target
 
     return (X_train, y_train, X_test, y_test)
+
+def load_svhn_data_noaug(datadir):
+    # augmentation is not contained
+    train_transform, test_transform = _data_transforms_svhn()
+
+    svhn_train_ds = SVHN_truncated(datadir, train=True, download=True, transform=train_transform)
+    svhn_test_ds = SVHN_truncated(datadir, train=False, download=True, transform=test_transform)
+    
+    return svhn_train_ds, svhn_test_ds
+    
 #################
 def partition_data(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0):
     logging.info("*********partition data***************")
-    X_train, y_train, X_test, y_test = load_svhn_data(datadir)
-    n_train = X_train.shape[0]
+    X_train_all, y_train_all, X_test, y_test = load_svhn_data(datadir)
+    n_train = X_train_all.shape[0]
     # n_test = X_test.shape[0]
     total_idxs = np.random.permutation(n_train)
 
@@ -99,19 +109,19 @@ def partition_data(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0):
         valid_n = int(valid_ratio * n_train)
         train_idxs = total_idxs[valid_n:]
         valid_idxs = total_idxs[:valid_n]
-        X_valid = X_train[valid_idxs]
-        y_valid = y_train[valid_idxs]
+        X_valid = X_train_all[valid_idxs]
+        y_valid = y_train_all[valid_idxs]
 
-        X_train = X_train[train_idxs]
-        y_train = y_train[train_idxs]
+        X_train = X_train_all[train_idxs]
+        y_train = y_train_all[train_idxs]
     else :
         train_idxs = total_idxs
-        X_train = X_train[train_idxs]
-        y_train = y_train[train_idxs]
+        X_train = X_train_all[train_idxs]
+        y_train = y_train_all[train_idxs]
 
     if partition == "homo":
-        # total_num = n_train
-        # idxs = np.random.permutation(total_num)
+        total_num = X_train
+        train_idxs = np.random.permutation(total_num)
         batch_idxs = np.array_split(train_idxs, n_nets)
         net_dataidx_map = {i: batch_idxs[i] for i in range(n_nets)}
 
@@ -123,6 +133,7 @@ def partition_data(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0):
         net_dataidx_map = {}
 
         while min_size < 10:
+        #while min_size < int(0.50 * N / n_nets):
             idx_batch = [[] for _ in range(n_nets)]
             # for each class in the dataset
             for k in range(K):
@@ -149,7 +160,6 @@ def partition_data(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0):
         traindata_cls_counts = read_data_distribution(distribution_file_path)
     else:
         traindata_cls_counts = record_net_data_stats(y_train, net_dataidx_map)
-
     if valid_ratio:
         return X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts, valid_idxs
 
@@ -159,39 +169,46 @@ def partition_data(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0):
 def partition_data_equally(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0):
     logging.info("*********partition data equally***************")
     n_auxi_nets = 10
-    assert n_auxi_nets <= n_nets
-    X_train, y_train, X_test, y_test = load_svhn_data(datadir)
-    n_train = X_train.shape[0]
+    X_train_all, y_train_all, X_test, y_test = load_svhn_data(datadir)
+    n_train = X_train_all.shape[0]
     # n_test = X_test.shape[0]
     total_idxs = np.random.permutation(n_train)
 
     X_valid = None
     y_valid = None
     valid_idxs = None
-
+    subset2original_idx = {}
+    original2subset_idx = {}
+    
     if valid_ratio > 0.0:
         valid_n = int(valid_ratio * n_train)
         train_idxs = total_idxs[valid_n:]
         valid_idxs = total_idxs[:valid_n]
-        X_valid = X_train[valid_idxs]
-        y_valid = y_train[valid_idxs]
+        X_valid = X_train_all[valid_idxs]
+        y_valid = y_train_all[valid_idxs]
 
-        X_train = X_train[train_idxs]
-        y_train = y_train[train_idxs]
+        X_train = X_train_all[train_idxs]
+        y_train = y_train_all[train_idxs]
+        
+        for subset_idx, original_idx in enumerate(train_idxs):
+            subset2original_idx[subset_idx] = original_idx 
+            original2subset_idx[original_idx] = subset_idx
     else :
         train_idxs = total_idxs
         X_train = X_train[train_idxs]
         y_train = y_train[train_idxs]
 
     if partition == 'homo':
+        total_num = X_train.shape[0]
+        train_idxs = np.random.permutation(total_num)
         batch_idxs = np.array_split(train_idxs, n_nets)
         net_dataidx_map = {i : batch_idxs[i] for i in range(n_nets)}
 
     elif partition == 'hetero':
+        assert n_auxi_nets <= n_nets
         # Divide indicies to smaller groups
 
-        min_size = 0
-        K = 10 ### Number of class!
+        K = 10 ### Number of class  !
         net_dataidx_map = {}
         num_indicies = X_train.shape[0]
         y_indicies = [i for i in range(num_indicies)]
@@ -250,7 +267,6 @@ def partition_data_equally(dataset, datadir, partition, n_nets, alpha, valid_rat
                     _idx_batch = [idx_j + idx.tolist() for idx_j, idx in zip(_idx_batch, np.split(idx_k, propotions))]
                     min_size = min([len(idx_j) for idx_j in _idx_batch])
 
-
             for j in range(_n_nets):
                 np.random.shuffle(_idx_batch[j])
             idx_batch += _idx_batch
@@ -270,7 +286,12 @@ def partition_data_equally(dataset, datadir, partition, n_nets, alpha, valid_rat
 
 
     if valid_ratio :
-        return X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts, valid_idxs
+        # Change subset index to original index
+        net_dataidx_map_all = {}
+        for k,v in net_dataidx_map.items():
+            index_all = [subset2original_idx[index] for index in v]
+            net_dataidx_map_all[k] = index_all
+        return X_train, y_train, X_test, y_test, net_dataidx_map_all, traindata_cls_counts, valid_idxs
 
     return X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts
 
@@ -391,7 +412,17 @@ def load_partition_data_distributed_svhn(process_id, dataset, data_dir, partitio
 
 
 def load_partition_data_svhn(dataset, data_dir, partition_method, partition_alpha, client_number,
-                                batch_size, valid_ratio=0.0, split_equally=False):
+                                batch_size, valid_ratio=0.0, split_equally=False, randaug=False, condense=False):
+    
+    if condense :
+        data_local_noaug = dict()
+       # _, _, _, _, _, _, dst_train_noaug, _, _ = get_dataset('svhn', data_dir)
+        dst_train_noaug, _ = load_svhn_data_noaug(data_dir)
+       # x_train, y_train, x_test, y_test = load_svhn_data(data_dir)
+        
+
+    
+    
     if split_equally :
         partitioned_data = partition_data_equally(dataset,
                                                 data_dir,
@@ -440,54 +471,77 @@ def load_partition_data_svhn(dataset, data_dir, partition_method, partition_alph
             client_idx, len(train_data_local), len(test_data_local)))
         train_data_local_dict[client_idx] = train_data_local
         test_data_local_dict[client_idx] = test_data_local
+        
+                # For dataset condense
+        if condense :
+            ''' load no aug dataset for all clients '''
+            dataidxs = net_dataidx_map[client_idx]
+            images_all = [torch.unsqueeze(dst_train_noaug[idx][0], dim=0) for idx in dataidxs] 
+            labels_all = [dst_train_noaug[idx][1] for idx in dataidxs]
+            images_all = torch.cat(images_all, dim=0)
+            labels_all = torch.tensor(labels_all, dtype=torch.long)
+            data_local_noaug[client_idx] = (images_all, labels_all)
 
-    if valid_ratio > 0.0 :
+    if valid_ratio > 0.0 and not condense:
         # Get valid dataloader
-        dataidxs = valid_idxs
+        dataidxs = valid_idxs[0]
         # validation batch size 1024 for fast validation and 2 num_workers
-        valid_data_global, _ = get_dataloader_val_svhn(data_dir, 1024, 64, dataidxs, num_workers=0)
-
-
+        valid_data_global, _ = get_dataloader_val_SVHN(data_dir, 1024, 64, dataidxs, num_workers=0)
         return train_data_num, test_data_num, train_data_global, test_data_global, \
            data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num, valid_data_global
+    
+    elif valid_ratio > 0.0 and condense:
+        # Get valid dataloader
+        dataidxs = valid_idxs[0]
+        # validation batch size 1024 for fast validation and 2 num_workers
+        valid_data_global, _ = get_dataloader_val_SVHN(data_dir, 1024, 64, dataidxs, num_workers=0)
+        
+        return train_data_num, test_data_num, train_data_global, test_data_global, \
+           data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num, valid_data_global, data_local_noaug
+    
+    
+    if condense :
+        return train_data_num, test_data_num, train_data_global, test_data_global, \
+           data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num, data_local_noaug
+        
 
     return train_data_num, test_data_num, train_data_global, test_data_global, \
            data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num
 
 
-def load_partition_data_svhn_validation(dataset, data_dir, partition_method, partition_alpha, client_number,
-                                           batch_size, valid_ratio=0.0):
-    X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data(dataset,
-                                                                                             data_dir,
-                                                                                             partition_method,
-                                                                                             client_number,
-                                                                                             partition_alpha, valid_ratio)
-    class_num = len(np.unique(y_train))
-    logging.info("traindata_cls_counts = " + str(traindata_cls_counts))
-    train_data_num = sum([len(net_dataidx_map[r]) for r in range(client_number)])
+# def load_partition_data_svhn_validation(dataset, data_dir, partition_method, partition_alpha, client_number,
+#                                            batch_size, valid_ratio=0.0):
+#     X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data(dataset,
+#                                                                                              data_dir,
+#                                                                                              partition_method,
+#                                                                                              client_number,
+#                                                                                              partition_alpha, valid_ratio)
+#     class_num = len(np.unique(y_train))
+#     logging.info("traindata_cls_counts = " + str(traindata_cls_counts))
+#     train_data_num = sum([len(net_dataidx_map[r]) for r in range(client_number)])
 
-    train_data_global, test_data_global = get_dataloader(dataset, data_dir, batch_size, batch_size)
-    logging.info("train_dl_global number = " + str(len(train_data_global)))
-    logging.info("test_dl_global number = " + str(len(test_data_global)))
-    test_data_num = len(test_data_global)
+#     train_data_global, test_data_global = get_dataloader(dataset, data_dir, batch_size, batch_size)
+#     logging.info("train_dl_global number = " + str(len(train_data_global)))
+#     logging.info("test_dl_global number = " + str(len(test_data_global)))
+#     test_data_num = len(test_data_global)
 
-    # get local dataset
-    data_local_num_dict = dict()
-    train_data_local_dict = dict()
-    test_data_local_dict = dict()
+#     # get local dataset
+#     data_local_num_dict = dict()
+#     train_data_local_dict = dict()
+#     test_data_local_dict = dict()
 
-    for client_idx in range(client_number):
-        dataidxs = net_dataidx_map[client_idx]
-        local_data_num = len(dataidxs)
-        data_local_num_dict[client_idx] = local_data_num
-        logging.info("client_idx = %d, local_sample_number = %d" % (client_idx, local_data_num))
+#     for client_idx in range(client_number):
+#         dataidxs = net_dataidx_map[client_idx]
+#         local_data_num = len(dataidxs)
+#         data_local_num_dict[client_idx] = local_data_num
+#         logging.info("client_idx = %d, local_sample_number = %d" % (client_idx, local_data_num))
 
-        # training batch size = 64; algorithms batch size = 32
-        train_data_local, test_data_local = get_dataloader(dataset, data_dir, batch_size, batch_size,
-                                                 dataidxs)
-        logging.info("client_idx = %d, batch_num_train_local = %d, batch_num_test_local = %d" % (
-            client_idx, len(train_data_local), len(test_data_local)))
-        train_data_local_dict[client_idx] = train_data_local
-        test_data_local_dict[client_idx] = test_data_local
-    return train_data_num, test_data_num, train_data_global, test_data_global, \
-           data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num
+#         # training batch size = 64; algorithms batch size = 32
+#         train_data_local, test_data_local = get_dataloader(dataset, data_dir, batch_size, batch_size,
+#                                                  dataidxs)
+#         logging.info("client_idx = %d, batch_num_train_local = %d, batch_num_test_local = %d" % (
+#             client_idx, len(train_data_local), len(test_data_local)))
+#         train_data_local_dict[client_idx] = train_data_local
+#         test_data_local_dict[client_idx] = test_data_local
+#     return train_data_num, test_data_num, train_data_global, test_data_global, \
+#            data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num

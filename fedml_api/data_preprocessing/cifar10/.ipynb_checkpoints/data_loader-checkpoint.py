@@ -468,7 +468,7 @@ def load_partition_data_cifar10(dataset, data_dir, partition_method, partition_a
         data_local_noaug = dict()
        # _, _, _, _, _, _, dst_train_noaug, _, _ = get_dataset('CIFAR10', data_dir)
         dst_train_noaug, _ = load_cifar10_data_noaug(data_dir)
-        x_train, y_train, x_test, y_test = load_cifar10_data(data_dir)
+        #x_train, y_train, x_test, y_test = load_cifar10_data(data_dir)
         
 
     

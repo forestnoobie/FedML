@@ -112,9 +112,6 @@ class FeddfAPI(object):
         self._setup_clients(train_data_local_num_dict, train_data_local_dict, test_data_local_dict, client_model_trainer)
         self._init_logs()
         
-
-
-    
     def get_image_label_mean(self):
         
         images_means, labels_means = torch.Tensor().to(self.device), torch.Tensor().to(self.device)
@@ -187,7 +184,9 @@ class FeddfAPI(object):
         else :
             for client_idx, client in enumerate(self.client_list):
                 syn_data = copy.deepcopy(self.syn_data[client_idx])
-                condense_data = client.condense(w_global, round_idx=-1, syn_data=syn_data)
+                round_idx = -1
+                if self.args.condense_mid : round_idx = self.args.condense_mid_round
+                condense_data = client.condense(w_global, round_idx=round_idx, syn_data=syn_data)
                 self.syn_data[client_idx] = copy.deepcopy(condense_data)
         
         
@@ -269,6 +268,10 @@ class FeddfAPI(object):
         for round_idx in range(self.args.comm_round):
             logging.info("################Communication round : {}".format(round_idx))
 
+            if self.args.condense_mid:
+                if round_idx + 1 == self.args.condense_mid_round:
+                    self._init_condense(w_global)
+            
             w_locals = [] # N * C \ N : number of unlabeled dataset,  C : number of classes of labeled dataset
             avg_logits = self._init_logits() # For offline dataloader
 
@@ -291,7 +294,7 @@ class FeddfAPI(object):
                     client.update_average_dataset(self.average_data)
                 
                 '''condense'''
-                if self.args.condense and not self.args.condense_init:
+                if self.args.condense and not self.args.condense_init and not self.args.condense_mid:
                     syn_data = copy.deepcopy(self.syn_data[client_idx])
                     client.update_local_noaug_dataset(self.train_data_local_noaug_dict[client_idx])
                     # syn_data가 비어있을 때만 condense? arg_parser 또 만들어야되나? once + syn_Data가 없으면 condense . 
@@ -311,10 +314,22 @@ class FeddfAPI(object):
                 # Save model
                 client.model_trainer.save_model(self.save_model_dir)
                 
- 
+                '''Client server for analysis'''
+                if self.args.save_server:
+                    if round_idx  == (self.args.comm_round //2 -1) or round_idx == self.args.comm_round -1:
+                        save_model_name = "client_r{}".format(round_idx)
+                        client.model_trainer.save_model(self.save_model_dir, model_type=save_model_name)
+
                 
                 # Gather average Logits for offline logits
                 # avg_logits += client.get_logits(self.unlabeled_train_data)
+                
+            '''Saving server for analysis'''
+            if self.args.save_server:
+                if round_idx  == (self.args.comm_round //2 -1) or round_idx == self.args.comm_round -1:
+                    ## Save server
+                    self.model_trainer.save_model(self.save_model_dir, round_idx, "server")    
+            
             # Initialize model fusion with aggregated w_global
             w_global = self._aggregate(w_locals)
             self.model_trainer.set_model_params(w_global)
@@ -330,8 +345,14 @@ class FeddfAPI(object):
             '''training server with condensed data''' 
             if self.args.train_condense_server :
                 if round_idx % self.args.frequency_of_the_test == 0:
-                    self._global_test_on_server(round_idx, "con")          
-                self._train_condense_server(round_idx, client_indexes)
+                    self._global_test_on_server(round_idx, "con")
+                    
+                '''Condense mid'''
+                if self.args.condense_mid: 
+                    if round_idx + 1 == self.args.condense_mid_round or round_idx + 1 > self.args.condense_mid_round:
+                        self._train_condense_server(round_idx,client_indexes)
+                else :
+                    self._train_condense_server(round_idx, client_indexes)
             
             '''Train condensed data one by one not by ensemble'''
             if self.args.train_condense_server_onebyone:
@@ -340,6 +361,8 @@ class FeddfAPI(object):
                 self._train_condense_onebyone(round_idx, client_indexes)
                 
             w_global = self.model_trainer.get_model_params()
+            
+
             
             # test results
             # at last round
@@ -403,12 +426,12 @@ class FeddfAPI(object):
         selected_syn_data_dict = {}
         for c in client_indexes:
             syn_data = [self.syn_data[c][0]]
-            syn_label = [self.syn_data[c][1]]
+            syn_label = [self.syn_data[c][1]]            
             syn_data = torch.cat(syn_data)
             syn_label = torch.cat(syn_label)
             selected_syn_data_dict[c] = (syn_data, syn_label)
             
-        self.model_trainer.train_condense_only_one(selected_syn_data_dict, self.val_global, self.device, self.args)
+        self.model_trainer.train_condense_only_one2(selected_syn_data_dict, self.val_global, self.device, self.args)
         
     
     def _train_condense_server(self, round_idx, client_indexes):

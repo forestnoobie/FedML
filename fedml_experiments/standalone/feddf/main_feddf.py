@@ -110,6 +110,10 @@ def add_args(parser):
     parser.add_argument('--uniform_aggregate', help='Uniform averaging in aggregation', default=False,
                         action='store_true')    
     
+    parser.add_argument('--save_server', help='save server?',
+                        action='store_true')
+    
+    
     # WANDB
     parser.add_argument('--pname', type=str, default='', metavar='N',
                         help='Project name for wandb ;con;hard')
@@ -190,7 +194,15 @@ def add_args(parser):
     parser.add_argument('--coninit_save_dir', type=str, default='./condata',
                         help='data directory')
 
+    '''condense_mid'''
+    parser.add_argument('--condense_mid', help='condensing in middle of round only',
+                        action='store_true') 
+    
+    parser.add_argument('--condense_mid_round', help='When to start condensing',
+                        type=int, default=50) 
+    
 
+  
     
     # Condense training
 
@@ -266,6 +278,15 @@ def load_data(args, dataset_name):
         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num = load_partition_data_federated_emnist(args.dataset, args.data_dir)
         args.client_num_in_total = client_num
+        
+    elif dataset_name == "svhn":
+        logging.info("load_data. dataset_name = %s" % dataset_name)
+        train_data_num, test_data_num, train_data_global, test_data_global, \
+        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
+        class_num, *valid_idxs = load_partition_data_svhn(args.dataset, args.data_dir, args.partition_method,
+                                args.partition_alpha, args.client_num_in_total, args.batch_size,
+                                             args.valid_ratio, split_equally=args.split_equally, randaug=args.randaug, condense=args.condense)    
+        
 
     else:
         if dataset_name == "cifar10":
@@ -396,6 +417,8 @@ def create_model(args, model_name, output_dim):
         model = resnet8(class_num=output_dim)
     elif model_name == "resnet8_no_bn" and "cifar" in args.dataset:
         model = resnet8_no_bn(dataset=args.dataset)
+    elif model_name == "resnet8_no_bn" and "svhn" in args.dataset:
+        model = resnet8_no_bn(dataset=args.dataset)
     elif model_name == "cnn" and "cifar" in args.dataset:
         model = CNNCifar(class_num=output_dim)
     elif model_name == "cnn" and "mnist" in args.dataset:
@@ -443,7 +466,16 @@ def get_proj_name(pname):
              "-localepoch_" + str(args.epochs) + "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
        "-coninit_" + str(args.condense_init) + "-initol_" + str(args.init_outer_loops) + \
         "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
-    "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + \
+    "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + "-s" + str(args.seed) + \
+       "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
+        project_name = "fedcon-0420"
+        
+    elif pname == "con-mid":
+        display_name = "FedCon-mid" + \
+             "-localepoch_" + str(args.epochs) + "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
+       "-coninit_" + str(args.condense_init) + "-initol_" + str(args.init_outer_loops) + \
+        "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
+    "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) +  "-s" + str(args.seed) + \
        "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
         project_name = "fedcon-0420"
 
@@ -487,6 +519,13 @@ def get_proj_name(pname):
    "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
         project_name = "fedcon-0420"
     
+    elif pname == "feddf-svhn":
+        display_name = "Feddf-svhn" + "-localepoch_" + str(args.epochs)  + \
+         "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
+    "-localepoch_" + str(args.epochs) + \
+   "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
+        project_name = "fedcon-0420"
+    
     elif pname == "fedmix":
         display_name = "Fedmix" + \
          "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
@@ -498,8 +537,15 @@ def get_proj_name(pname):
     elif pname == "avg":
         display_name = "Fedavg" + \
          "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
-    "-localepoch_" + str(args.epochs) + "-model_" + str(args.model) + "-unlabeldata_" + str(args.unlabeled_dataset) + \
-   "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix)  + "-model_" + str(args.model)
+    "-localepoch_" + str(args.epochs) + "-model_" + str(args.model)  + "-unlabeldata_" + str(args.unlabeled_dataset) + \
+    "-fedmix_" + str(args.fedmix)  + "-model_" + str(args.model)
+        project_name = "fedavg-0420"
+        
+    elif pname == "avg-svhn":
+        display_name = "Fedavg-svhnf" + \
+         "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
+    "-localepoch_" + str(args.epochs) + "-model_" + str(args.model)  + "-unlabeldata_" + str(args.unlabeled_dataset) + \
+    "-fedmix_" + str(args.fedmix)  + "-model_" + str(args.model)
         project_name = "fedavg-0420"
     
     
