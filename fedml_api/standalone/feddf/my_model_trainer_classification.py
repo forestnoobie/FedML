@@ -35,7 +35,6 @@ class MyModelTrainer(ModelTrainer):
         
     def train(self, train_data, device, args):
         model = self.model
-
         model.to(device)
         model.train()
 

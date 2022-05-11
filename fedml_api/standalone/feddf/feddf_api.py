@@ -362,8 +362,6 @@ class FeddfAPI(object):
                 
             w_global = self.model_trainer.get_model_params()
             
-
-            
             # test results
             # at last round
             if round_idx == self.args.comm_round - 1:
@@ -378,6 +376,7 @@ class FeddfAPI(object):
     def _client_sampling(self, round_idx, client_num_in_total, client_num_per_round):
         if client_num_in_total == client_num_per_round:
             client_indexes = [client_index for client_index in range(client_num_in_total)]
+            client_indexes = np.array(client_indexes)
         else:
             num_clients = min(client_num_per_round, client_num_in_total)
             np.random.seed(round_idx)  # make sure for each comparison, we are selecting the same clients each round
