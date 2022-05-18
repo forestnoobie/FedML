@@ -350,8 +350,16 @@ class FeddfAPI(object):
                 '''Condense mid'''
                 if self.args.condense_mid: 
                     if round_idx + 1 == self.args.condense_mid_round or round_idx + 1 > self.args.condense_mid_round:
-                        self._train_condense_server(round_idx,client_indexes)
+                        
+                        ## Temperorary for using all clients condensed data
+                        # client_indexes_all = np.arange(self.args.client_num_in_total)
+                        # self._train_condense_server(round_idx, client_indexes_all)
+
+                        self._train_condense_server(round_idx, client_indexes)
                 else :
+                    # client_indexes_all = np.arange(self.args.client_num_in_total)
+                    # self._train_condense_server(round_idx, client_indexes_all)
+                    
                     self._train_condense_server(round_idx, client_indexes)
             
             '''Train condensed data one by one not by ensemble'''

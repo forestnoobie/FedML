@@ -318,6 +318,7 @@ class ResNet_cifar(ResNetBase):
         resnet_size,
         scaling=1,
         save_activations=False,
+        save_features=False,
         group_norm_num_groups=None,
         freeze_bn=False,
         freeze_bn_affine=False,
@@ -383,6 +384,8 @@ class ResNet_cifar(ResNetBase):
         # a placeholder for activations in the intermediate layers.
         self.save_activations = save_activations
         self.activations = None
+        self.save_features = save_features
+        self.features = None
 
     def forward(self, x):
         x = self.conv1(x)
@@ -396,9 +399,12 @@ class ResNet_cifar(ResNetBase):
         x = self.layer3(x)
         activation3 = x
         x = self.avgpool(x)
+        features = x
         x = x.view(x.size(0), -1)
         x = self.classifier(x)
 
+        if self.save_features:
+            self.features = features
         if self.save_activations:
             self.activations = [activation1, activation2, activation3]
         return x

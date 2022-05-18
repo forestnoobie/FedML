@@ -113,6 +113,10 @@ def add_args(parser):
     parser.add_argument('--save_server', help='save server?',
                         action='store_true')
     
+    # FedProx
+    parser.add_argument('--lambda_fedprox', type=float, default=0.0, metavar='LR',
+                        help='Fedprox lambda')
+    
     
     # WANDB
     parser.add_argument('--pname', type=str, default='', metavar='N',
@@ -538,15 +542,40 @@ def get_proj_name(pname):
         display_name = "Fedavg" + \
          "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
     "-localepoch_" + str(args.epochs) + "-model_" + str(args.model)  + "-unlabeldata_" + str(args.unlabeled_dataset) + \
-    "-fedmix_" + str(args.fedmix)  + "-model_" + str(args.model)
+    "-fedmix_" + str(args.fedmix)  
         project_name = "fedavg-0420"
         
     elif pname == "avg-svhn":
-        display_name = "Fedavg-svhnf" + \
+        display_name = "Fedavg-svhn" + \
          "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
     "-localepoch_" + str(args.epochs) + "-model_" + str(args.model)  + "-unlabeldata_" + str(args.unlabeled_dataset) + \
-    "-fedmix_" + str(args.fedmix)  + "-model_" + str(args.model)
+    "-fedmix_" + str(args.fedmix)  
         project_name = "fedavg-0420"
+    
+    elif pname == "prox":
+        display_name = "FedProx" + \
+         "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
+    "-localepoch_" + str(args.epochs) + "-model_" + str(args.model)  + "-unlabeldata_" + str(args.unlabeled_dataset) + \
+    "-fedmix_" + str(args.fedmix)  + "-prox_" + str(args.lambda_fedprox)
+        project_name = "fedavg-0420"
+    
+    elif pname == "prox-df":
+        display_name = "Feddf-prox" + "-localepoch_" + str(args.epochs)  + \
+         "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
+    "-localepoch_" + str(args.epochs) + \
+   "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model) + "-prox_" + str(args.lambda_fedprox)
+        project_name = "fedcon-0420"
+    
+    elif pname == "prox-con":
+        display_name = "FedCon-prox" + "-localepoch_" + str(args.epochs)  + \
+         "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
+    "-localepoch_" + str(args.epochs) + \
+        "-coninit_" + str(args.condense_init) + "-initol_" + str(args.init_outer_loops) + \
+        "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
+    "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + "-s" + str(args.seed) + \
+   "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model) + \
+        "-prox_" + str(args.lambda_fedprox)
+        project_name = "fedcon-0420"
     
     
     elif pname == "test":

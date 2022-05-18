@@ -31,12 +31,21 @@ class MyModelTrainer(ModelTrainer):
         model_file_name = model_type + '_%04d'%(int(self.id))
         save_path = os.path.join(save_dir, model_file_name)
         torch.save(model.cpu().state_dict(), save_path)
-
+    
+    '''For fedprox'''
+    def flatten(self, source):
+        return torch.cat([value.flatten() for value in source.values()])
         
     def train(self, train_data, device, args):
         model = self.model
         model.to(device)
         model.train()
+        
+        # Fed proxs
+        if args.lambda_fedprox :
+            W0 = {k : v.detach().clone() for k, v in model.named_parameters()}
+            W0 = self.flatten(W0)
+            W0 = W0.to(device)
 
         # train and update
         criterion = nn.CrossEntropyLoss().to(device)
@@ -56,6 +65,11 @@ class MyModelTrainer(ModelTrainer):
                 optimizer.zero_grad()
                 log_probs = model(x)
                 loss = criterion(log_probs, labels)
+                if args.lambda_fedprox :
+                    flatten_model = self.flatten(dict(model.named_parameters()))
+                    flatten_model = flatten_model.to(device)
+                    loss += args.lambda_fedprox * torch.sum((W0 - flatten_model)**2)
+                    
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
                 optimizer.step()
