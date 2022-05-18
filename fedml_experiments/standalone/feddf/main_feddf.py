@@ -183,6 +183,9 @@ def add_args(parser):
     parser.add_argument('--condense_init', help='condensing at initializaiton only',
                         action='store_true') 
     
+    parser.add_argument('--condense_reinit_model', help='Wheter to reinit model while condensing',
+                        action='store_true') 
+    
     parser.add_argument('--init_outer_loops', help="Condensing iterations",
                        type=int, default=100)
   
@@ -514,7 +517,7 @@ def get_proj_name(pname):
          "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
     "-hardtype" + str(args.hard_sample) + "-hardratio" + str(args.hard_sample_ratio) + \
    "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
-        project_name = "fedml-df-hard"
+        project_name = "fedcon-0420"
 
     elif pname == "feddf":
         display_name = "Feddf" + "-localepoch_" + str(args.epochs)  + \

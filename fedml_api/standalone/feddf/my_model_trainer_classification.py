@@ -323,7 +323,7 @@ class MyModelTrainer(ModelTrainer):
         outer_loops = args.init_outer_loops
         
         ''' update model '''
-        model = self.model
+        model = copy.deepcopy(self.model)
         model.to(device)
         model.train()
 
@@ -346,6 +346,10 @@ class MyModelTrainer(ModelTrainer):
                 return images_all[idx_shuffle]
             else :
                 return None
+        
+        def weight_reset(m):
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+                m.reset_parameters()
                         
 
         mean = []
@@ -421,6 +425,11 @@ class MyModelTrainer(ModelTrainer):
             scheduler.step()
             loss_avg += loss.item()
             loss_log =  loss.detach().cpu().item()
+            
+            '''model reinit'''
+            if (ol) % 20 == 0 :
+                model.apply(weight_reset)
+                ## Reinitializaion
             
             if ol % 100 == 0 :
                 logging.info('Outer loop idx : {}, loss {:.6f}'.format(ol, loss_log))            

@@ -168,6 +168,9 @@ class FeddfAPI(object):
             load_folder = "alpha{}_clientnum{}_seed{}_{}".format(
                                             self.args.partition_alpha, self.args.client_num_in_total, self.args.seed,
                                             self.args.model)
+            if self.args.condense_reinit_model:
+                load_folder += "_reinit"
+            
             load_fname = "imglr{}_ipc{}_ol{}.pt".format(
                                             self.args.image_lr, self.args.image_per_class, self.args.init_outer_loops)
             load_path = os.path.join(self.args.coninit_load_dir, load_folder)
@@ -194,6 +197,10 @@ class FeddfAPI(object):
             save_folder = "alpha{}_clientnum{}_seed{}_{}".format(
                                             self.args.partition_alpha, self.args.client_num_in_total, self.args.seed,
                                             self.args.model)
+            
+            if self.args.condense_reinit_model :
+                save_folder += "_reinit"
+            
             save_fname = "imglr{}_ipc{}_ol{}.pt".format(
                                             self.args.image_lr, self.args.image_per_class, self.args.init_outer_loops)
             save_path = os.path.join(self.args.coninit_save_dir, save_folder)
