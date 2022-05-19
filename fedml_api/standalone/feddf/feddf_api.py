@@ -63,7 +63,7 @@ class FeddfAPI(object):
         self.unlabeled_train_data = unlabeled_train_dl
         self.unlabeled_test_data = unlabeled_test_dl
         self.unlabeled_train_data_num = train_data_num
-        
+
         ## Fedmix
         self.fedmix = False
         if args.fedmix or args.fedmix_server:

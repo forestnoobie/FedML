@@ -466,7 +466,7 @@ def get_proj_name(pname):
         "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
     "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + \
        "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
-        project_name = "fedcon-0420"
+        project_name = "fedcon-0519"
         
     elif pname == "con-init":
         display_name = "FedCon-init" + \
@@ -475,7 +475,16 @@ def get_proj_name(pname):
         "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
     "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + "-s" + str(args.seed) + \
        "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
-        project_name = "fedcon-0420"
+        project_name = "fedcon-0519"
+        
+    elif pname == "con-reinit":
+        display_name = "FedCon-reinit" + \
+             "-localepoch_" + str(args.epochs) + "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
+       "-coninit_" + str(args.condense_init) + "-initol_" + str(args.init_outer_loops) + \
+        "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
+    "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + "-s" + str(args.seed) + \
+       "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
+        project_name = "fedcon-0519"
         
     elif pname == "con-mid":
         display_name = "FedCon-mid" + \
@@ -484,7 +493,7 @@ def get_proj_name(pname):
         "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
     "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) +  "-s" + str(args.seed) + \
        "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
-        project_name = "fedcon-0420"
+        project_name = "fedcon-0519"
 
     elif pname == "con-init-onebyone":
         display_name = "FedCon-onebyone" + \
@@ -493,7 +502,7 @@ def get_proj_name(pname):
         "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
     "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + \
        "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
-        project_name = "fedcon-0420"
+        project_name = "fedcon-0519"
         
     elif pname == "con-data-hp":
         display_name = "FedCon-data-hp" + \
@@ -517,21 +526,21 @@ def get_proj_name(pname):
          "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
     "-hardtype" + str(args.hard_sample) + "-hardratio" + str(args.hard_sample_ratio) + \
    "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
-        project_name = "fedcon-0420"
+        project_name = "fedcon-0519"
 
     elif pname == "feddf":
         display_name = "Feddf" + "-localepoch_" + str(args.epochs)  + \
          "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
     "-localepoch_" + str(args.epochs) + \
    "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
-        project_name = "fedcon-0420"
+        project_name = "fedcon-0519"
     
     elif pname == "feddf-svhn":
         display_name = "Feddf-svhn" + "-localepoch_" + str(args.epochs)  + \
          "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
     "-localepoch_" + str(args.epochs) + \
    "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
-        project_name = "fedcon-0420"
+        project_name = "fedcon-0519"
     
     elif pname == "fedmix":
         display_name = "Fedmix" + \
@@ -539,7 +548,7 @@ def get_proj_name(pname):
     "-localepoch_" + str(args.epochs) + "-unlabeldata_" + str(args.unlabeled_dataset) + \
    "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-fedmixServer_" + \
         str(args.fedmix_server) + "-model_" + str(args.model)
-        project_name = "fedcon-0420"
+        project_name = "fedcon-0519"
     
     elif pname == "avg":
         display_name = "Fedavg" + \
@@ -567,7 +576,7 @@ def get_proj_name(pname):
          "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
     "-localepoch_" + str(args.epochs) + \
    "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model) + "-prox_" + str(args.lambda_fedprox)
-        project_name = "fedcon-0420"
+        project_name = "fedcon-0519"
     
     elif pname == "prox-con":
         display_name = "FedCon-prox" + "-localepoch_" + str(args.epochs)  + \
@@ -578,7 +587,7 @@ def get_proj_name(pname):
     "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + "-s" + str(args.seed) + \
    "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model) + \
         "-prox_" + str(args.lambda_fedprox)
-        project_name = "fedcon-0420"
+        project_name = "fedcon-0519"
     
     
     elif pname == "test":
