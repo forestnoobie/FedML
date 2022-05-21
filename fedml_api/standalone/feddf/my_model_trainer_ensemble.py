@@ -361,7 +361,6 @@ class MyModelTrainer(ModelTrainer):
             raise ValueError("{} not defined".format(args.condense_optimizer))
         scheduler = CosineAnnealingLR(optimizer, args.condense_server_steps)
 
-          
         epoch_loss = []
         curr_step = 0
         patience_step = 0

@@ -164,7 +164,11 @@ def add_args(parser):
     parser.add_argument('--fedmix_server', help='Use fedmix on Server?',
                         action='store_true')
     
-    parser.add_argument('--lam', type=float, default=0.1, help="lambda fixed")
+    parser.add_argument('--lam', type=float, default=0.1, 
+                        help="lambda fixed")
+    
+    parser.add_argument('--fedmix_wth_condense', help='Use condense data with averaged data',
+                        action='store_true')
     
     # For Dataset Condensation
     
@@ -183,7 +187,7 @@ def add_args(parser):
     parser.add_argument('--condense_init', help='condensing at initializaiton only',
                         action='store_true') 
     
-    parser.add_argument('--condense_reinit_model', help='Wheter to reinit model while condensing',
+    parser.add_argument('--condense_reinit_model', help='Whether to reinit model while condensing',
                         action='store_true') 
     
     parser.add_argument('--init_outer_loops', help="Condensing iterations",
@@ -546,6 +550,16 @@ def get_proj_name(pname):
         display_name = "Fedmix" + \
          "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
     "-localepoch_" + str(args.epochs) + "-unlabeldata_" + str(args.unlabeled_dataset) + \
+   "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-fedmixServer_" + \
+        str(args.fedmix_server) + "-model_" + str(args.model)
+        project_name = "fedcon-0519"
+        
+    elif pname == "fedmix_reinit":
+        display_name = "Fedmix_reinit" + \
+         "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
+    "-localepoch_" + str(args.epochs) + "-unlabeldata_" + str(args.unlabeled_dataset) + \
+        "-coninit_" + str(args.condense_init) + "-initol_" + str(args.init_outer_loops) + \
+        "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
    "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-fedmixServer_" + \
         str(args.fedmix_server) + "-model_" + str(args.model)
         project_name = "fedcon-0519"

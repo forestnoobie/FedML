@@ -69,6 +69,9 @@ class FeddfAPI(object):
         if args.fedmix or args.fedmix_server:
             self.fedmix = True
         
+        if args.fedmix_wth_condense :
+            assert args.fedmix_server == True, "fedmix_wth_condensing only can be used with fedmix_server"
+        
         ## Hard sample mining
         if self.args.hard_sample :
             # Pick idx of dataset
@@ -120,6 +123,11 @@ class FeddfAPI(object):
             images_means = torch.cat([images_means, image_mean])
             labels_means = torch.cat([labels_means, label_mean])
         
+        # Save averaged images
+        save_fname = os.path.join(self.args.wandb_save_dir, 'averaged_data.pt')
+        torch.save({"averaged_data" : images_means.detach().clone(), 
+                    "averaged_label" : labels_means.detach().clone()}, save_fname)
+        
         return images_means, labels_means
 
     def generate_mean(self, client_idx):
@@ -132,13 +140,15 @@ class FeddfAPI(object):
         
         # Get mean
         images_means, labels_means = torch.Tensor().to(self.device), torch.Tensor().to(self.device)
-        for batch_idx, (images, labels) in enumerate(local_training_data):
-            images, labels = images.to(self.device), labels.to(self.device)
-            images_mean = torch.mean(images, dim=0).unsqueeze(0)
-            labels_mean = torch.mean(F.one_hot(labels, num_classes=self.class_num).float(), dim=0).unsqueeze(0)
-            images_means = torch.cat([images_means, images_mean], dim=0)
-            labels_means = torch.cat([labels_means, labels_mean], dim=0)
         
+        for _ in range(2): ## To generate enough data
+            for batch_idx, (images, labels) in enumerate(local_training_data):
+                images, labels = images.to(self.device), labels.to(self.device)
+                images_mean = torch.mean(images, dim=0).unsqueeze(0)
+                labels_mean = torch.mean(F.one_hot(labels, num_classes=self.class_num).float(), dim=0).unsqueeze(0)
+                images_means = torch.cat([images_means, images_mean], dim=0)
+                labels_means = torch.cat([labels_means, labels_mean], dim=0)
+
         return images_means, labels_means
     
     def _setup_clients(self, train_data_local_num_dict, train_data_local_dict, test_data_local_dict, model_trainer):
@@ -215,6 +225,20 @@ class FeddfAPI(object):
         
         logging.info("############init condense  (END)#############")
         
+    def _integrate_condense(self):
+        # condense data -> self.average_data
+        ### Dictionary of syn_data, take it all out and aggregate
+        images_means, labels_means = self.average_data
+        syn_data = [self.syn_data[c_idx][0] for c_idx in range(self.args.client_num_in_total)]
+        syn_label = [self.syn_data[c_idx][1] for c_idx in range(self.args.client_num_in_total)]            
+        syn_data = torch.cat(syn_data)
+        syn_label = torch.cat(syn_label) 
+        syn_label = F.one_hot(syn_label, num_classes=self.class_num).float()
+                
+        images_means = torch.cat([images_means, syn_data])
+        labels_means = torch.cat([labels_means, syn_label])
+        self.average_data = images_means, labels_means
+        
     def _init_logits(self):
         init_logits = torch.zeros(self.unlabeled_train_data_num, self.class_num, device=self.device)
         return init_logits
@@ -271,6 +295,11 @@ class FeddfAPI(object):
         
         if self.args.condense_init:
             self._init_condense(w_global)
+        
+        '''Using average data with condense'''
+        if self.args.fedmix_wth_condense:
+            self._integrate_condense()
+        
         
         for round_idx in range(self.args.comm_round):
             logging.info("################Communication round : {}".format(round_idx))
@@ -364,10 +393,11 @@ class FeddfAPI(object):
 
                         self._train_condense_server(round_idx, client_indexes)
                 else :
+                    self._train_condense_server(round_idx, client_indexes)
+                    
                     # client_indexes_all = np.arange(self.args.client_num_in_total)
                     # self._train_condense_server(round_idx, client_indexes_all)
                     
-                    self._train_condense_server(round_idx, client_indexes)
             
             '''Train condensed data one by one not by ensemble'''
             if self.args.train_condense_server_onebyone:
