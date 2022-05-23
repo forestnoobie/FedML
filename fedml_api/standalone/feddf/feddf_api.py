@@ -57,6 +57,9 @@ class FeddfAPI(object):
         ## For saving model directory
         self.save_model_dir = os.path.join(args.wandb_save_dir, "./model_parameters")
         os.makedirs(self.save_model_dir, exist_ok=True)
+        self.save_analysis_model_dir =  os.path.join(args.wandb_save_dir, "./model_analysis")
+        os.makedirs(self.save_analysis_model_dir, exist_ok=True)
+
 
         ## Distillation Fusion
         [train_data_num, test_data_num, unlabeled_train_dl, unlabeled_test_dl] = unlabeled_dataset
@@ -354,7 +357,7 @@ class FeddfAPI(object):
                 if self.args.save_server:
                     if round_idx  == (self.args.comm_round //2 -1) or round_idx == self.args.comm_round -1:
                         save_model_name = "client_r{}".format(round_idx)
-                        client.model_trainer.save_model(self.save_model_dir, model_type=save_model_name)
+                        client.model_trainer.save_model(self.save_analysis_model_dir, model_type=save_model_name)
 
                 
                 # Gather average Logits for offline logits
@@ -364,7 +367,7 @@ class FeddfAPI(object):
             if self.args.save_server:
                 if round_idx  == (self.args.comm_round //2 -1) or round_idx == self.args.comm_round -1:
                     ## Save server
-                    self.model_trainer.save_model(self.save_model_dir, round_idx, "server")    
+                    self.model_trainer.save_model(self.save_analysis_model_dir, round_idx, "server")    
             
             # Initialize model fusion with aggregated w_global
             w_global = self._aggregate(w_locals)
