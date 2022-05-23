@@ -325,12 +325,12 @@ def get_unlabeled_dataloader_CIFAR100(datadir, train_bs, test_bs, dataidxs=None,
     test_data_num = len(test_ds)
     
     train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=True,
-                               num_workers=num_workers, pin_memory=True)
+                               num_workers=num_workers, pin_memory=False)
     test_dl = data.DataLoader(dataset=test_ds, batch_size=test_bs, shuffle=False)
     
     return train_data_num, test_data_num, train_dl, test_dl    
 
-def get_dataloader_CIFAR100(datadir, train_bs, test_bs, dataidxs=None, num_workers=2, randaug=False):
+def get_dataloader_CIFAR100(datadir, train_bs, test_bs, dataidxs=None, num_workers=1, randaug=False):
     dl_obj = CIFAR100_truncated
 
     transform_train, transform_test = _data_transforms_cifar100()
@@ -341,12 +341,12 @@ def get_dataloader_CIFAR100(datadir, train_bs, test_bs, dataidxs=None, num_worke
     test_ds = dl_obj(datadir, train=False, transform=transform_test, download=True)
 
     train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=True, drop_last=True,
-                               num_workers=num_workers, pin_memory=True)
+                               num_workers=num_workers, pin_memory=False)
     test_dl = data.DataLoader(dataset=test_ds, batch_size=test_bs, shuffle=False, drop_last=True)
 
     return train_dl, test_dl
 
-def get_dataloader_val_CIFAR100(datadir, train_bs, test_bs, dataidxs=None, num_workers=2):
+def get_dataloader_val_CIFAR100(datadir, train_bs, test_bs, dataidxs=None, num_workers=1):
     # Test transforms for validation set
     dl_obj = CIFAR100_truncated
 
@@ -356,7 +356,7 @@ def get_dataloader_val_CIFAR100(datadir, train_bs, test_bs, dataidxs=None, num_w
     test_ds = dl_obj(datadir, train=False, transform=transform_test, download=True)
 
     train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=True,
-                               drop_last=True, num_workers=num_workers, pin_memory=True)
+                               drop_last=True, num_workers=num_workers, pin_memory=False)
     test_dl = data.DataLoader(dataset=test_ds, batch_size=test_bs, shuffle=False,
                               drop_last=True)
 
@@ -364,7 +364,7 @@ def get_dataloader_val_CIFAR100(datadir, train_bs, test_bs, dataidxs=None, num_w
 
 
 def get_dataloader_test_CIFAR100(datadir, train_bs, test_bs, dataidxs_train=None, dataidxs_test=None,
-                                 num_workers=2):
+                                 num_workers=1):
     dl_obj = CIFAR100_truncated
 
     transform_train, transform_test = _data_transforms_cifar100()

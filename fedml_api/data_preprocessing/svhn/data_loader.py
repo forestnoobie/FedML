@@ -322,7 +322,7 @@ def get_unlabeled_dataloader_SVHN(datadir, train_bs, test_bs, dataidxs=None, num
     test_data_num = len(test_ds)
 
     train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=True,
-                               num_workers=num_workers, pin_memory=True)
+                               num_workers=num_workers, pin_memory=False)
     test_dl = data.DataLoader(dataset=test_ds, batch_size=test_bs, shuffle=False)
 
     return train_data_num, test_data_num, train_dl, test_dl
@@ -339,13 +339,13 @@ def get_dataloader_SVHN(datadir, train_bs, test_bs, dataidxs=None, num_workers=0
     test_ds = dl_obj(datadir, train=False, transform=transform_test, download=True)
 
     train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=True,
-                               drop_last=False, num_workers=num_workers, pin_memory=True)
+                               drop_last=False, num_workers=num_workers, pin_memory=False)
     test_dl = data.DataLoader(dataset=test_ds, batch_size=test_bs, shuffle=False,
                               drop_last=False)
 
     return train_dl, test_dl
 
-def get_dataloader_val_SVHN(datadir, train_bs, test_bs, dataidxs=None, num_workers=0):
+def get_dataloader_val_SVHN(datadir, train_bs, test_bs, dataidxs=None, num_workers=1):
     # Test transforms for validation set
 
     dl_obj = SVHN_truncated
@@ -356,7 +356,7 @@ def get_dataloader_val_SVHN(datadir, train_bs, test_bs, dataidxs=None, num_worke
     test_ds = dl_obj(datadir, train=False, transform=transform_test, download=True)
 
     train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=False,
-                               drop_last=False, num_workers=num_workers, pin_memory=True)
+                               drop_last=False, num_workers=num_workers, pin_memory=False)
     test_dl = data.DataLoader(dataset=test_ds, batch_size=test_bs, shuffle=False,
                               drop_last=False)
 
@@ -486,7 +486,7 @@ def load_partition_data_svhn(dataset, data_dir, partition_method, partition_alph
         # Get valid dataloader
         dataidxs = valid_idxs[0]
         # validation batch size 1024 for fast validation and 2 num_workers
-        valid_data_global, _ = get_dataloader_val_SVHN(data_dir, 1024, 64, dataidxs, num_workers=0)
+        valid_data_global, _ = get_dataloader_val_SVHN(data_dir, 1024, 64, dataidxs, num_workers=1)
         return train_data_num, test_data_num, train_data_global, test_data_global, \
            data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num, valid_data_global
     
@@ -494,7 +494,7 @@ def load_partition_data_svhn(dataset, data_dir, partition_method, partition_alph
         # Get valid dataloader
         dataidxs = valid_idxs[0]
         # validation batch size 1024 for fast validation and 2 num_workers
-        valid_data_global, _ = get_dataloader_val_SVHN(data_dir, 1024, 64, dataidxs, num_workers=0)
+        valid_data_global, _ = get_dataloader_val_SVHN(data_dir, 1024, 64, dataidxs, num_workers=1)
         
         return train_data_num, test_data_num, train_data_global, test_data_global, \
            data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num, valid_data_global, data_local_noaug
