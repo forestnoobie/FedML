@@ -306,7 +306,7 @@ def get_dataloader_test(dataset, datadir, train_bs, test_bs, dataidxs_train, dat
     return get_dataloader_test_SVHN(datadir, train_bs, test_bs, dataidxs_train, dataidxs_test)
 
 
-def get_unlabeled_dataloader_SVHN(datadir, train_bs, test_bs, dataidxs=None, num_workers=0, randaug=False):
+def get_unlabeled_dataloader_SVHN(datadir, train_bs, test_bs, dataidxs=None, num_workers=1, randaug=False):
     # For ensemble distillation, shuffle off + return num of train and test
 
     dl_obj = SVHN_truncated
