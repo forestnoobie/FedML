@@ -328,7 +328,7 @@ def get_unlabeled_dataloader_SVHN(datadir, train_bs, test_bs, dataidxs=None, num
     return train_data_num, test_data_num, train_dl, test_dl
 
 
-def get_dataloader_SVHN(datadir, train_bs, test_bs, dataidxs=None, num_workers=0, randaug=False):
+def get_dataloader_SVHN(datadir, train_bs, test_bs, dataidxs=None, num_workers=1, randaug=False):
     dl_obj = SVHN_truncated
 
     transform_train, transform_test = _data_transforms_svhn()

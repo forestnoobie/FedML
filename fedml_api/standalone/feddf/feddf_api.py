@@ -95,9 +95,9 @@ class FeddfAPI(object):
             
             unlabeled_dataloader = DataLoader(hard_dataset,
                                               batch_size=self.args.unlabeled_batch_size,
-                                             num_workers=2,
+                                             num_workers=1,
                                              shuffle=True,
-                                             pin_memory=True)
+                                             pin_memory=False)
             
             self.hard_sample_loader = copy.deepcopy(unlabeled_dataloader)
                 
