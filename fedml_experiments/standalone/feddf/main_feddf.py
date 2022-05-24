@@ -603,6 +603,17 @@ def get_proj_name(pname):
         "-prox_" + str(args.lambda_fedprox)
         project_name = "fedcon-0519"
     
+    elif pname == "prox-con-re":
+        display_name = "FedCon-prox-re" + "-localepoch_" + str(args.epochs)  + \
+         "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
+    "-localepoch_" + str(args.epochs) + \
+        "-coninit_" + str(args.condense_init) + "-initol_" + str(args.init_outer_loops) + \
+        "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
+    "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + "-s" + str(args.seed) + \
+   "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model) + \
+        "-prox_" + str(args.lambda_fedprox)
+        project_name = "fedcon-0519
+    
     
     elif pname == "test":
         display_name = "Pre condensing data" + \
