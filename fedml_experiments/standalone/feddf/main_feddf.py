@@ -499,8 +499,8 @@ def get_proj_name(pname):
        "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
         project_name = "fedcon-0519"
 
-    elif pname == "con-init-onebyone":
-        display_name = "FedCon-onebyone" + \
+    elif pname == "con-reinit-onebyone":
+        display_name = "FedCon-re-onebyone" + \
              "-localepoch_" + str(args.epochs) + "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
        "-coninit_" + str(args.condense_init) + "-initol_" + str(args.init_outer_loops) + \
         "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
