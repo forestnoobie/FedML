@@ -612,7 +612,7 @@ def get_proj_name(pname):
     "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + "-s" + str(args.seed) + \
    "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model) + \
         "-prox_" + str(args.lambda_fedprox)
-        project_name = "fedcon-0519
+        project_name = "fedcon-0519"
     
     
     elif pname == "test":
