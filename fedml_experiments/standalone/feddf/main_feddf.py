@@ -483,7 +483,8 @@ def get_proj_name(pname):
         
     elif pname == "con-reinit":
         display_name = "FedCon-reinit" + \
-             "-localepoch_" + str(args.epochs) + "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
+             "-localepoch_" + str(args.epochs) + "-client_num" + str(args.client_num_in_total)  +\
+        "-alpha" + str(args.partition_alpha) + "-ssteps_" +  str(args.server_steps) + \
        "-coninit_" + str(args.condense_init) + "-initol_" + str(args.init_outer_loops) + \
         "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
     "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + "-s" + str(args.seed) + \
