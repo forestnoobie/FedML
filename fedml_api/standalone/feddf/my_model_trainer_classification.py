@@ -328,7 +328,7 @@ class MyModelTrainer(ModelTrainer):
         model.train()
 
         ''' organize real dataset'''
-        logging.info('Start Condensing')
+        logging.info('Start Condensing ', client_idx)
         indices_class = [[] for c in range(num_classes)]
         images_all, labels_all = train_data_no_aug
         for i, lab in enumerate(labels_all):
