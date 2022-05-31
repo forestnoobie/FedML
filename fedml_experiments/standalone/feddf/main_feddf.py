@@ -152,6 +152,9 @@ def add_args(parser):
 
     parser.add_argument('--valid_ratio', type=float, default=0.0, metavar='LR',
                         help='Ratio of validation set')
+    
+    parser.add_argument('--train_ratio', type=float, default=1.0, metavar='LR',
+                        help='Ratio of training set')
 
     parser.add_argument('--logit_type', type=str, default='average', metavar='LR',
                         help='Type of logit')
@@ -313,7 +316,7 @@ def load_data(args, dataset_name):
         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num, *valid_idxs = data_loader(args.dataset, args.data_dir, args.partition_method,
                                 args.partition_alpha, args.client_num_in_total, args.batch_size,
-                                             args.valid_ratio, split_equally=args.split_equally, randaug=args.randaug, condense=args.condense)    
+                                             args.valid_ratio, split_equally=args.split_equally, randaug=args.randaug, condense=args.condense, train_ratio=args.train_ratio)    
         
         
     if centralized:

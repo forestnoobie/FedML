@@ -166,7 +166,7 @@ def partition_data(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0):
     return  X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts
 
 #######################
-def partition_data_equally(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0):
+def partition_data_equally(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0, train_ratio=1.0):
     logging.info("*********partition data equally***************")
     n_auxi_nets = 10
     X_train_all, y_train_all, X_test, y_test = load_svhn_data(datadir)
@@ -328,7 +328,7 @@ def get_unlabeled_dataloader_SVHN(datadir, train_bs, test_bs, dataidxs=None, num
     return train_data_num, test_data_num, train_dl, test_dl
 
 
-def get_dataloader_SVHN(datadir, train_bs, test_bs, dataidxs=None, num_workers=0, randaug=False):
+def get_dataloader_SVHN(datadir, train_bs, test_bs, dataidxs=None, num_workers=1, randaug=False):
     dl_obj = SVHN_truncated
 
     transform_train, transform_test = _data_transforms_svhn()
@@ -412,7 +412,7 @@ def load_partition_data_distributed_svhn(process_id, dataset, data_dir, partitio
 
 
 def load_partition_data_svhn(dataset, data_dir, partition_method, partition_alpha, client_number,
-                                batch_size, valid_ratio=0.0, split_equally=False, randaug=False, condense=False):
+                                batch_size, valid_ratio=0.0, split_equally=False, randaug=False, condense=False, train_ratio=1.0):
     
     if condense :
         data_local_noaug = dict()
@@ -429,7 +429,8 @@ def load_partition_data_svhn(dataset, data_dir, partition_method, partition_alph
                                                 partition_method,
                                                 client_number,
                                                 partition_alpha,
-                                                valid_ratio)
+                                                valid_ratio,
+                                                train_ratio)
 
     else :
         partitioned_data = partition_data(dataset,

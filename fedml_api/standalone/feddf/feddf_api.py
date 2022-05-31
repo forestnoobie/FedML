@@ -43,8 +43,8 @@ class FeddfAPI(object):
         self.train_data_num_in_total = train_data_num
         self.test_data_num_in_total = test_data_num
         self.class_num = class_num
-        
 
+        
         self.client_list = []
         self.train_data_local_num_dict = train_data_local_num_dict
         self.train_data_local_dict = train_data_local_dict

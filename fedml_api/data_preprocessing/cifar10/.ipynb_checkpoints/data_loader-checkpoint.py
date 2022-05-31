@@ -208,7 +208,7 @@ def partition_data(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0):
 
     return  X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts
 
-def partition_data_equally(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0):
+def partition_data_equally(dataset, datadir, partition, n_nets, alpha, valid_ratio=0.0, train_ratio=1.0):
     logging.info("*********partition data equally***************")
     n_auxi_nets = 10
     X_train_all, y_train_all, X_test, y_test = load_cifar10_data(datadir)
@@ -229,6 +229,10 @@ def partition_data_equally(dataset, datadir, partition, n_nets, alpha, valid_rat
         X_valid = X_train_all[valid_idxs]
         y_valid = y_train_all[valid_idxs]
 
+        # X_train = X_train_all[train_idxs]
+        # y_train = y_train_all[train_idxs]
+        
+        train_idxs = train_idxs[:int(train_ratio * len(train_idxs))]
         X_train = X_train_all[train_idxs]
         y_train = y_train_all[train_idxs]
         
@@ -237,6 +241,8 @@ def partition_data_equally(dataset, datadir, partition, n_nets, alpha, valid_rat
             original2subset_idx[original_idx] = subset_idx
     else :
         train_idxs = total_idxs
+        train_idxs = total_idxs[:int(train_ratio * len(train_idxs))]
+
         X_train = X_train[train_idxs]
         y_train = y_train[train_idxs]
 
@@ -460,7 +466,7 @@ def load_partition_data_distributed_cifar10(process_id, dataset, data_dir, parti
 
 
 def load_partition_data_cifar10(dataset, data_dir, partition_method, partition_alpha, client_number,
-                                batch_size, valid_ratio=0.0, split_equally=False, randaug=False, condense=False):
+                                batch_size, valid_ratio=0.0, split_equally=False, randaug=False, condense=False, train_ratio=1.0):
     
 
     '''For condense'''
@@ -478,7 +484,8 @@ def load_partition_data_cifar10(dataset, data_dir, partition_method, partition_a
                                                 partition_method,
                                                 client_number,
                                                 partition_alpha,
-                                                valid_ratio)
+                                                valid_ratio,
+                                                train_ratio)
 
     else :
         partitioned_data = partition_data(dataset,
