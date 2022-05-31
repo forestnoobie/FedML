@@ -184,6 +184,9 @@ class FeddfAPI(object):
             if self.args.condense_reinit_model:
                 load_folder += "_reinit"
             
+            if self.args.train_ratio < 1.0 :
+                load_folder += "_tr{}".format(self.args.train_ratio)
+            
             load_fname = "imglr{}_ipc{}_ol{}.pt".format(
                                             self.args.image_lr, self.args.image_per_class, self.args.init_outer_loops)
             load_path = os.path.join(self.args.coninit_load_dir, load_folder)
@@ -213,6 +216,9 @@ class FeddfAPI(object):
             
             if self.args.condense_reinit_model :
                 save_folder += "_reinit"
+                
+            if self.args.train_ratio < 1.0 :
+                save_folder += "_tr{}".format(self.args.train_ratio)
             
             save_fname = "imglr{}_ipc{}_ol{}.pt".format(
                                             self.args.image_lr, self.args.image_per_class, self.args.init_outer_loops)
