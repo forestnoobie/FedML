@@ -131,7 +131,7 @@ class FeddfAPI(object):
         
         # Save averaged images
         save_fname = os.path.join(self.args.wandb_save_dir, 'averaged_data.pt')
-        torch.save({"averaged_data" : self.avg_data}, save_fname)
+        torch.save({"averaged_data" : avg_data}, save_fname)
         
         # torch.save({"averaged_data" : images_means.detach().clone(), 
         #             "averaged_label" : labels_means.detach().clone()}, save_fname)
@@ -152,7 +152,6 @@ class FeddfAPI(object):
         
         generate_num = self.args.num_mixed_data_per_client 
         num_loops = int((generate_num * self.args.batch_size) / local_sample_number ) + 1
-        import ipdb; ipdb.set_trace() # Check equal number of data is made
 
         for _ in range(num_loops): ## To generate enough data
             for batch_idx, (images, labels) in enumerate(local_training_data):
@@ -354,6 +353,8 @@ class FeddfAPI(object):
                 if self.fedmix:
                     images_means = [self.avg_data[c_idx][0] for c_idx in range(self.args.client_num_in_total)]
                     labels_means = [self.avg_data[c_idx][1] for c_idx in range(self.args.client_num_in_total)]
+                    images_means = torch.cat(images_means)
+                    labels_means = torch.cat(labels_means)
                     self.selected_avg_data = (images_means, labels_means)
                     client.update_average_dataset(self.selected_avg_data)
                 
@@ -541,6 +542,8 @@ class FeddfAPI(object):
         if self.args.fedmix_server:
             images_means = [self.avg_data[c_idx][0] for c_idx in range(self.args.client_num_in_total)]
             labels_means = [self.avg_data[c_idx][1] for c_idx in range(self.args.client_num_in_total)]
+            images_means = torch.cat(images_means)
+            labels_means = torch.cat(labels_means)
             self.selected_avg_data = (images_means, labels_means)
             round_server_val_acc = self.model_trainer.train(unlabeled_dataloader, self.selected_avg_data, self.val_global, self.device, self.args)
         else : 
