@@ -173,6 +173,11 @@ def add_args(parser):
     parser.add_argument('--fedmix_wth_condense', help='Use condense data with averaged data',
                         action='store_true')
     
+    parser.add_argument('--num_mixed_data_per_client', help="Condensing iterations",
+                       type=int, default=0)
+    
+    
+    
     # For Dataset Condensation
     
     parser.add_argument('--condense', help='Condensing?',

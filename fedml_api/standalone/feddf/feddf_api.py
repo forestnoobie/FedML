@@ -120,18 +120,23 @@ class FeddfAPI(object):
         
     def get_image_label_mean(self):
         
+        avg_data = dict()
         images_means, labels_means = torch.Tensor().to(self.device), torch.Tensor().to(self.device)
         for client_idx in range(self.args.client_num_in_total):
             image_mean, label_mean = self.generate_mean(client_idx)
-            images_means = torch.cat([images_means, image_mean])
-            labels_means = torch.cat([labels_means, label_mean])
+            avg_data[client_idx] = (image_mean, label_mean)
+            
+            # images_means = torch.cat([images_means, image_mean])
+            # labels_means = torch.cat([labels_means, label_mean])
         
         # Save averaged images
         save_fname = os.path.join(self.args.wandb_save_dir, 'averaged_data.pt')
-        torch.save({"averaged_data" : images_means.detach().clone(), 
-                    "averaged_label" : labels_means.detach().clone()}, save_fname)
+        torch.save({"averaged_data" : self.avg_data}, save_fname)
         
-        return images_means, labels_means
+        # torch.save({"averaged_data" : images_means.detach().clone(), 
+        #             "averaged_label" : labels_means.detach().clone()}, save_fname)
+        
+        return avg_data
 
     def generate_mean(self, client_idx):
         c = self.client_list[0] #  We just need the client instance, which one doesn't matter
@@ -140,17 +145,25 @@ class FeddfAPI(object):
                                     self.test_data_local_dict[client_idx],
                                             self.train_data_local_num_dict[client_idx])
         local_training_data = c.local_training_data
+        local_sample_number = c.get_sample_number()
         
         # Get mean
         images_means, labels_means = torch.Tensor().to(self.device), torch.Tensor().to(self.device)
         
-        for _ in range(2): ## To generate enough data
+        generate_num = self.args.num_mixed_data_per_client 
+        num_loops = int((generate_num * self.args.batch_size) / local_sample_number ) + 1
+        import ipdb; ipdb.set_trace() # Check equal number of data is made
+
+        for _ in range(num_loops): ## To generate enough data
             for batch_idx, (images, labels) in enumerate(local_training_data):
                 images, labels = images.to(self.device), labels.to(self.device)
                 images_mean = torch.mean(images, dim=0).unsqueeze(0)
                 labels_mean = torch.mean(F.one_hot(labels, num_classes=self.class_num).float(), dim=0).unsqueeze(0)
                 images_means = torch.cat([images_means, images_mean], dim=0)
                 labels_means = torch.cat([labels_means, labels_mean], dim=0)
+        
+        images_means = images_means[:generate_num]
+        labels_means = labels_means[:generate_num]
 
         return images_means, labels_means
     
@@ -165,9 +178,8 @@ class FeddfAPI(object):
                 c.update_local_noaug_dataset(self.train_data_local_noaug_dict[client_idx])
 
             self.client_list.append(c)
-            
         if self.fedmix:
-            self.average_data = self.get_image_label_mean()
+            self.avg_data = self.get_image_label_mean()
         logging.info("############setup_clients (END)#############")
 
 
@@ -237,7 +249,11 @@ class FeddfAPI(object):
     def _integrate_condense(self):
         # condense data -> self.average_data
         ### Dictionary of syn_data, take it all out and aggregate
-        images_means, labels_means = self.average_data
+        images_means = [self.avg_data[c_idx][0] for c_idx in range(self.args.client_num_in_total)]
+        labels_means = [self.avg_data[c_idx][1] for c_idx in range(self.args.client_num_in_total)]
+        images_means = torch.cat(images_means)
+        labels_means = torch.cat(labels_means)
+        
         syn_data = [self.syn_data[c_idx][0] for c_idx in range(self.args.client_num_in_total)]
         syn_label = [self.syn_data[c_idx][1] for c_idx in range(self.args.client_num_in_total)]            
         syn_data = torch.cat(syn_data)
@@ -246,7 +262,7 @@ class FeddfAPI(object):
                 
         images_means = torch.cat([images_means, syn_data])
         labels_means = torch.cat([labels_means, syn_label])
-        self.average_data = images_means, labels_means
+        self.selected_avg_data = images_means, labels_means
         
     def _init_logits(self):
         init_logits = torch.zeros(self.unlabeled_train_data_num, self.class_num, device=self.device)
@@ -336,7 +352,10 @@ class FeddfAPI(object):
                 
                 # For fedmix
                 if self.fedmix:
-                    client.update_average_dataset(self.average_data)
+                    images_means = [self.avg_data[c_idx][0] for c_idx in range(self.args.client_num_in_total)]
+                    labels_means = [self.avg_data[c_idx][1] for c_idx in range(self.args.client_num_in_total)]
+                    self.selected_avg_data = (images_means, labels_means)
+                    client.update_average_dataset(self.selected_avg_data)
                 
                 '''condense'''
                 if self.args.condense and not self.args.condense_init and not self.args.condense_mid:
@@ -385,7 +404,7 @@ class FeddfAPI(object):
             if self.args.server_steps :
                 if round_idx % self.args.frequency_of_the_test == 0:
                     self._global_test_on_server(round_idx, "ens")
-                self._ensemble_distillation(round_idx, avg_logits)
+                self._ensemble_distillation(round_idx, avg_logits, client_indexes)
             
             '''training server with condensed data''' 
             if self.args.train_condense_server :
@@ -503,7 +522,7 @@ class FeddfAPI(object):
             raise ValueError("Undefined condense train type")
             exit()
     
-    def _ensemble_distillation(self, round_idx, avg_logits):
+    def _ensemble_distillation(self, round_idx, avg_logits, client_indexes):
 
         stats = {
             'round_idx' : round_idx,
@@ -520,7 +539,10 @@ class FeddfAPI(object):
             
         
         if self.args.fedmix_server:
-            round_server_val_acc = self.model_trainer.train(unlabeled_dataloader, self.average_data, self.val_global, self.device, self.args)
+            images_means = [self.avg_data[c_idx][0] for c_idx in range(self.args.client_num_in_total)]
+            labels_means = [self.avg_data[c_idx][1] for c_idx in range(self.args.client_num_in_total)]
+            self.selected_avg_data = (images_means, labels_means)
+            round_server_val_acc = self.model_trainer.train(unlabeled_dataloader, self.selected_avg_data, self.val_global, self.device, self.args)
         else : 
             round_server_val_acc = self.model_trainer.train(unlabeled_dataloader, self.val_global, self.device, self.args)
                
