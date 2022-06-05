@@ -561,7 +561,7 @@ def get_proj_name(pname):
     "-localepoch_" + str(args.epochs) + "-unlabeldata_" + str(args.unlabeled_dataset) + \
    "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-fedmixServer_" + \
         str(args.fedmix_server) + "-model_" + str(args.model)
-        project_name = "fedcon-0519"
+        project_name = "fedmix-0603"
         
     elif pname == "fedmix_reinit":
         display_name = "Fedmix_reinit" + \
@@ -571,7 +571,7 @@ def get_proj_name(pname):
         "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
    "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-fedmixServer_" + \
         str(args.fedmix_server) + "-model_" + str(args.model)
-        project_name = "fedcon-0519"
+        project_name = "fedmix-0603"
     
     elif pname == "avg":
         display_name = "Fedavg" + \

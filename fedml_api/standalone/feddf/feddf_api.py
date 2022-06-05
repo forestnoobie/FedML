@@ -540,8 +540,8 @@ class FeddfAPI(object):
             
         
         if self.args.fedmix_server:
-            images_means = [self.avg_data[c_idx][0] for c_idx in range(self.args.client_num_in_total)]
-            labels_means = [self.avg_data[c_idx][1] for c_idx in range(self.args.client_num_in_total)]
+            images_means = [self.avg_data[c_idx][0] for c_idx in range(self.args.client_num_per_round)]
+            labels_means = [self.avg_data[c_idx][1] for c_idx in range(self.args.client_num_per_round)]
             images_means = torch.cat(images_means)
             labels_means = torch.cat(labels_means)
             self.selected_avg_data = (images_means, labels_means)
