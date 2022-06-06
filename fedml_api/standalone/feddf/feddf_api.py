@@ -16,6 +16,8 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset, Subset
 
 from fedml_api.standalone.feddf.client import Client
+from fedml_api.utils.utils_condense import TensorDataset
+
 
 
 class FeddfAPI(object):
@@ -400,9 +402,24 @@ class FeddfAPI(object):
             self.model_trainer.set_model_params(w_global)
             # update global weights with average logits
             avg_logits /= len(self.client_list)
-                        
+            
+            
+            '''train server with condensed data + public data'''
+            if self.args.train_public_condense_server :
+                assert self.args.train_public_condense_server != self.args.train_condense_server
+                ### Condense 랑 Unlabeled dataset을 합쳐줘서
+                ### model trainer에 넣어줘야! 아니면 model trainer에 넣어줘서 합쳐줘도 됨
+                ### 합쳐주면 unlabeled_dataloader를 새로 만들고
+                ### 합치면 기존에 넣을만한 model trainer가 있나 -> ensemble distillation model_trainer.train
+                
+                self._ensemble_with_public_condense(round_idx, client_indexes)
+                
+
+          ###########################################################      
+            
             '''training server with condensed data''' 
             if self.args.train_condense_server :
+                assert self.args.train_public_condense_server != self.args.train_condense_server
                 if round_idx % self.args.frequency_of_the_test == 0:
                     self._global_test_on_server(round_idx, "con")
                     
@@ -523,6 +540,23 @@ class FeddfAPI(object):
         else :
             raise ValueError("Undefined condense train type")
             exit()
+    
+    def _ensemble_with_public_condense(self, round_idx, client_indexes):
+        # Condensed data
+        syn_data = [self.syn_data[c][0] for c in client_indexes]
+        syn_label = [self.syn_data[c][1] for c in client_indexes]
+        syn_data = torch.cat(syn_data)
+        syn_label = torch.cat(syn_label)
+        selected_syn_data = (syn_data, syn_label)
+
+        # Public dataset
+        unlabeled_dataloader = self.hard_sample_loader
+        
+        self.model_trainer.train_wth_public_condense_soft(selected_syn_data, unlabeled_dataloader, 
+                                                          self.val_global, self.device, self.args)
+        
+        
+        
     
     def _ensemble_distillation(self, round_idx, avg_logits, client_indexes):
 

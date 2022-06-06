@@ -336,6 +336,94 @@ class MyModelTrainer(ModelTrainer):
         del self.client_models
         return best_val_acc
         
+    ####################
+    def train_wth_public_condense_soft(self, condensed_data, unlabeled_dataloader, val_data, device, args):
+        # make dataset and dataloader
+        # train with cross entropy
+        condensed_ds = TensorDataset(condensed_data[0], condensed_data[1])
+        condensed_dl = torch.utils.data.DataLoader(condensed_ds, batch_size=args.condense_batch_size, shuffle=True)
+    
+        # init client_model
+        self.load_client_models(device, args)
+        
+        model = self.model
+        model.to(device)
+        model.train()
+        
+        # train and update
+        criterion = nn.KLDivLoss(reduction='batchmean').to(device)
+        
+        if args.condense_optimizer == "sgd":
+            optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.condense_lr)
+        elif args.condense_optimizer == 'adam':
+            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.condense_lr)
+        else :
+            raise ValueError("{} not defined".format(args.condense_optimizer))
+        scheduler = CosineAnnealingLR(optimizer, args.condense_server_steps)
+
+        epoch_loss = []
+        curr_step = 0
+        patience_step = 0
+        curr_val_acc = 0
+        best_val_acc = 0
+        while curr_step < args.condense_server_steps and \
+        patience_step < args.condense_patience_steps:
+            unlabeled_iterator = iter(unlabeled_dataloader)
+            batch_loss = []
+            with tqdm(condensed_dl) as tstep:
+                for batch_idx, (x, labels) in enumerate(tstep):
+                    tstep.set_description(f"Step {curr_step}")
+                    if curr_step < args.condense_server_steps and \
+                    patience_step < args.condense_patience_steps:
+                        
+                        try : 
+                            x2, labels2 = next(unlabeled_iterator)
+                        except StopIteration:
+                            unlabeled_iterator = iter(unlabeled_dataloader)
+                            x2, labels2 = next(unlabeled_iterator)
+                            
+                        x, _ = x.to(device), labels.to(device)
+                        x2, _ = x2.to(device), labels.to(device)
+                        ## Combine x, x2
+                        combined_x = torch.cat([x, x2])
+                            
+                        
+                        model.train()                        
+                        optimizer.zero_grad()
+                        model.zero_grad()
+                        log_prob = model(combined_x)
+                        log_prob = F.log_softmax(log_prob, dim=1)
+
+                        # Get average logits from clients
+                        avg_logits = self.get_logits_from_clients(combined_x, device, args)
+                        
+                        loss = criterion(log_prob, avg_logits.detach())
+                        loss.backward()
+                        optimizer.step()
+                        scheduler.step()
+
+                        batch_loss.append(loss.detach().clone().item())
+                        curr_step += 1
+                        patience_step += 1
+
+                        ## Evaluate
+                        if val_data:
+                            if curr_step % 100 == 0 :
+                                curr_val_acc = self.validate(val_data, device, args)
+                                if curr_val_acc > best_val_acc:
+                                    best_val_acc = curr_val_acc
+                                    patience_step = 0
+
+                        tstep.set_postfix(val_acc=curr_val_acc,
+                                          best_val_acc=best_val_acc, 
+                                          step_loss=loss.item())
+
+                    else :
+                        break
+                
+                #logging.info("Epoch loss : {}".format(sum(batch_loss) / len(batch_loss)))
+        del self.client_models
+        return best_val_acc
     
     def train_wth_condense_soft(self, condensed_data, val_data, device, args):
         # make dataset and dataloader
