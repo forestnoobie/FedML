@@ -11,7 +11,8 @@ do
 		 --epochs ${EPOCH} --lr 0.1 --client_optimizer sgd --frequency_of_the_test 1 --ci 1 \
 		--valid_ratio 0.1 --unlabeled_data_dir /input/dataset/cifar100 --unlabeled_dataset cifar100 --unlabeled_batch_size 128 \
 		--server_steps 1000 --server_patience_steps 500 --fedmix_server \
-		--num_mixed_data_per_client 200 --seed ${SEED} --pname fedmix
+		--num_mixed_data_per_client 70 --seed ${SEED} --pname fedmix
 		done
 	done
 done
+

@@ -400,13 +400,7 @@ class FeddfAPI(object):
             self.model_trainer.set_model_params(w_global)
             # update global weights with average logits
             avg_logits /= len(self.client_list)
-            
-            '''FedDF'''
-            if self.args.server_steps :
-                if round_idx % self.args.frequency_of_the_test == 0:
-                    self._global_test_on_server(round_idx, "ens")
-                self._ensemble_distillation(round_idx, avg_logits, client_indexes)
-            
+                        
             '''training server with condensed data''' 
             if self.args.train_condense_server :
                 if round_idx % self.args.frequency_of_the_test == 0:
@@ -426,6 +420,13 @@ class FeddfAPI(object):
                     
                     # client_indexes_all = np.arange(self.args.client_num_in_total)
                     # self._train_condense_server(round_idx, client_indexes_all)
+            
+            '''FedDF'''
+            if self.args.server_steps :
+                if round_idx % self.args.frequency_of_the_test == 0:
+                    self._global_test_on_server(round_idx, "ens")
+                self._ensemble_distillation(round_idx, avg_logits, client_indexes)
+
                     
             
             '''Train condensed data one by one not by ensemble'''
@@ -540,8 +541,10 @@ class FeddfAPI(object):
             
         
         if self.args.fedmix_server:
-            images_means = [self.avg_data[c_idx][0] for c_idx in range(self.args.client_num_per_round)]
-            labels_means = [self.avg_data[c_idx][1] for c_idx in range(self.args.client_num_per_round)]
+#             images_means = [self.avg_data[c_idx][0] for c_idx in range(self.args.client_num_per_round)]
+#             labels_means = [self.avg_data[c_idx][1] for c_idx in range(self.args.client_num_per_round)]
+            images_means = [self.avg_data[c_idx][0] for c_idx in range(self.args.client_num_in_total)] ## Hotfix
+            labels_means = [self.avg_data[c_idx][1] for c_idx in range(self.args.client_num_in_total)] 
             images_means = torch.cat(images_means)
             labels_means = torch.cat(labels_means)
             self.selected_avg_data = (images_means, labels_means)
