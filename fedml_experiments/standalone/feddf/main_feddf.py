@@ -246,7 +246,10 @@ def add_args(parser):
 
     parser.add_argument('--con_rand', help='train server with condense server',
                         action='store_true')
-
+    
+    parser.add_argument('--con_rand_neighbor', type=int, default=0, metavar='N',
+                        help='number of neighbors to random condense')
+    
     parser.add_argument('--condense_batch_size', type=int, default=6, metavar='N',
                         help='input batch size for training (default: 128)')
     
@@ -501,6 +504,16 @@ def get_proj_name(pname):
     "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + "-s" + str(args.seed) + "-trainratio" + str(args.train_ratio) + \
        "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
         project_name = "fedcon-0519"
+        
+    elif pname == "con-neighbor": # condensing neighbor
+        display_name = "FedCon-reinit-df" + \
+             "-localepoch_" + str(args.epochs) + "-client_num" + str(args.client_num_in_total)  +\
+        "-alpha" + str(args.partition_alpha) + "-neighbor" + str(args.con_rand_neighbor) + \
+       "-coninit_" + str(args.condense_init) + "-initol_" + str(args.init_outer_loops) + \
+        "-contype_" + str(args.condense_train_type) + "-ol" + str(args.outer_loops) + \
+    "-cps" + str(args.condense_patience_steps) + "-css" + str(args.condense_server_steps) + "-s" + str(args.seed) +  \
+       "-unlabel" + str(args.unlabeled_dataset) + "-fedmix_" + str(args.fedmix) + "-model_" + str(args.model)
+        project_name = "fedcon-0606"
         
     elif pname == "con-df": # Condense data + public data
         display_name = "FedCon-reinit-df" + \

@@ -199,6 +199,9 @@ class FeddfAPI(object):
             
             if self.args.train_ratio < 1.0 :
                 load_folder += "_tr{}".format(self.args.train_ratio)
+                
+            if self.args.con_rand_neighbor :
+                load_folder += "_nei{}".format(self.args.con_rand_neighbor)
             
             load_fname = "imglr{}_ipc{}_ol{}.pt".format(
                                             self.args.image_lr, self.args.image_per_class, self.args.init_outer_loops)
@@ -232,6 +235,9 @@ class FeddfAPI(object):
                 
             if self.args.train_ratio < 1.0 :
                 save_folder += "_tr{}".format(self.args.train_ratio)
+            
+            if self.args.con_rand_neighbor :
+                save_folder += "_nei{}".format(self.args.con_rand_neighbor)
             
             save_fname = "imglr{}_ipc{}_ol{}.pt".format(
                                             self.args.image_lr, self.args.image_per_class, self.args.init_outer_loops)

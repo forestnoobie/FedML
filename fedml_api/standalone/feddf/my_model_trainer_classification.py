@@ -271,6 +271,14 @@ class MyModelTrainer(ModelTrainer):
                 random_class = np.random.randint(10)
                 if args.con_rand:
                     img_syn = image_syn[random_class*ipc: (random_class+1)*ipc].reshape((ipc, channel, im_size[0], im_size[1]))
+                    ''' Condense only neighbor classes '''
+                    if args.con_rand_neighbor :
+                        neighbor_num = args.con_rand_neighbor
+                        # Neighbor class list
+                        neighbor_list = [(c + j) % args.class_num for j in range(neighbor_num)]
+                        neighbor_class = np.random.choice(neighbor_list)
+                        img_syn = image_syn[neighbor_class*ipc: (neighbor_class+1)*ipc].reshape((ipc, channel, im_size[0], im_size[1]))
+                    
                 else :
                     img_syn = image_syn[c*ipc: (c+1)*ipc].reshape((ipc, channel, im_size[0], im_size[1]))
                 lab_syn = torch.ones((ipc, ), device=device, dtype=torch.long) * c                
@@ -406,6 +414,16 @@ class MyModelTrainer(ModelTrainer):
                 random_class = np.random.randint(10)
                 if args.con_rand:
                     img_syn = image_syn[random_class*ipc: (random_class+1)*ipc].reshape((ipc, channel, im_size[0], im_size[1]))
+                    ''' Condense only neighbor classes '''
+                    if args.con_rand_neighbor :
+                        neighbor_num = args.con_rand_neighbor
+                        # Neighbor class list
+                        neighbor_list = [(c + j) % args.class_num for j in range(neighbor_num)]
+                        neighbor_class = np.random.choice(neighbor_list)
+                        img_syn = image_syn[neighbor_class*ipc: (neighbor_class+1)*ipc].reshape((ipc, channel, im_size[0], im_size[1]))
+                    
+                    
+                    
                 else :
                     img_syn = image_syn[c*ipc: (c+1)*ipc].reshape((ipc, channel, im_size[0], im_size[1]))
                     
